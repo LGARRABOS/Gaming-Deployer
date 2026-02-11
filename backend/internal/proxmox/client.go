@@ -1,0 +1,187 @@
+package proxmox
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net"
+	"net/http"
+	"net/url"
+	"time"
+)
+
+// Client is a minimal HTTP client for the Proxmox API.
+type Client struct {
+	baseURL   *url.URL
+	tokenID   string
+	tokenSecret string
+	http      *http.Client
+}
+
+// NewClient constructs a new Proxmox API client.
+func NewClient(rawURL, tokenID, tokenSecret string) (*Client, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	if u.Scheme == "" {
+		u.Scheme = "https"
+	}
+	return &Client{
+		baseURL:   u,
+		tokenID:   tokenID,
+		tokenSecret: tokenSecret,
+		http: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+	}, nil
+}
+
+// do issues an HTTP request with Proxmox auth headers and decodes JSON.
+func (c *Client) do(ctx context.Context, method, path string, query url.Values, out any) error {
+	u := *c.baseURL
+	u.Path = "/api2/json" + path
+	if len(query) > 0 {
+		u.RawQuery = query.Encode()
+	}
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("PVEAPIToken=%s=%s", c.tokenID, c.tokenSecret))
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("proxmox api error: %s", resp.Status)
+	}
+	if out == nil {
+		return nil
+	}
+	var wrapper struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&wrapper); err != nil {
+		return err
+	}
+	if len(wrapper.Data) == 0 || string(wrapper.Data) == "null" {
+		return nil
+	}
+	return json.Unmarshal(wrapper.Data, out)
+}
+
+// TestConnection simply calls /nodes to ensure credentials are valid.
+func (c *Client) TestConnection(ctx context.Context) error {
+	var nodes []map[string]any
+	return c.do(ctx, http.MethodGet, "/nodes", nil, &nodes)
+}
+
+// NextID returns the next VMID.
+func (c *Client) NextID(ctx context.Context) (int, error) {
+	var idStr string
+	if err := c.do(ctx, http.MethodGet, "/cluster/nextid", nil, &idStr); err != nil {
+		return 0, err
+	}
+	var id int
+	if _, err := fmt.Sscanf(idStr, "%d", &id); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+// CloneVM clones a VM from a template VMID on a given node.
+func (c *Client) CloneVM(ctx context.Context, node string, templateVMID, newVMID int, name, storage string) (string, error) {
+	// POST /nodes/{node}/qemu/{vmid}/clone
+	path := fmt.Sprintf("/nodes/%s/qemu/%d/clone", node, templateVMID)
+	q := url.Values{}
+	q.Set("newid", fmt.Sprintf("%d", newVMID))
+	q.Set("name", name)
+	if storage != "" {
+		q.Set("storage", storage)
+	}
+	var taskID string
+	if err := c.do(ctx, http.MethodPost, path, q, &taskID); err != nil {
+		return "", err
+	}
+	return taskID, nil
+}
+
+// ConfigureVM sets CPU, memory, disk, and network including cloud-init ipconfig0.
+func (c *Client) ConfigureVM(ctx context.Context, node string, vmid int, cores, memoryMB, diskGB int, bridge string, vlanTag *int, ipCIDR, gateway string) error {
+	path := fmt.Sprintf("/nodes/%s/qemu/%d/config", node, vmid)
+	q := url.Values{}
+	if cores > 0 {
+		q.Set("cores", fmt.Sprintf("%d", cores))
+	}
+	if memoryMB > 0 {
+		q.Set("memory", fmt.Sprintf("%d", memoryMB))
+	}
+	if diskGB > 0 {
+		q.Set("scsi0", fmt.Sprintf("local-lvm:%d", diskGB))
+	}
+	net := fmt.Sprintf("virtio,bridge=%s", bridge)
+	if vlanTag != nil {
+		net = net + fmt.Sprintf(",tag=%d", *vlanTag)
+	}
+	q.Set("net0", net)
+	if ipCIDR != "" && gateway != "" {
+		q.Set("ipconfig0", fmt.Sprintf("ip=%s,gw=%s", ipCIDR, gateway))
+	}
+	return c.do(ctx, http.MethodPost, path, q, nil)
+}
+
+// StartVM starts the VM.
+func (c *Client) StartVM(ctx context.Context, node string, vmid int) (string, error) {
+	path := fmt.Sprintf("/nodes/%s/qemu/%d/status/start", node, vmid)
+	var taskID string
+	if err := c.do(ctx, http.MethodPost, path, nil, &taskID); err != nil {
+		return "", err
+	}
+	return taskID, nil
+}
+
+// WaitForTask waits for a Proxmox task to complete.
+func (c *Client) WaitForTask(ctx context.Context, node, upid string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout waiting for proxmox task %s", upid)
+		}
+		var task struct {
+			Status string `json:"status"`
+		}
+		path := fmt.Sprintf("/nodes/%s/tasks/%s/status", node, url.PathEscape(upid))
+		if err := c.do(ctx, http.MethodGet, path, nil, &task); err != nil {
+			return err
+		}
+		if task.Status == "stopped" || task.Status == "OK" {
+			return nil
+		}
+		time.Sleep(3 * time.Second)
+	}
+}
+
+// WaitForSSH waits until the given host:port is accessible via TCP.
+func (c *Client) WaitForSSH(ctx context.Context, host string, port int, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	addr := fmt.Sprintf("%s:%d", host, port)
+	for {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout waiting for ssh on %s", addr)
+		}
+		d := net.Dialer{Timeout: 5 * time.Second}
+		conn, err := d.DialContext(ctx, "tcp", addr)
+		if err == nil {
+			_ = conn.Close()
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(3 * time.Second):
+		}
+	}
+}
+

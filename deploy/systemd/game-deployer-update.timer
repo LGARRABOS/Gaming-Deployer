@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodic auto-update of Proxmox Game Deployer
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+Unit=game-deployer-update.service
+
+[Install]
+WantedBy=timers.target
+

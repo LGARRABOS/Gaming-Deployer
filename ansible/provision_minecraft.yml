@@ -1,0 +1,99 @@
+---
+- name: Provision Minecraft server
+  hosts: all
+  become: true
+  vars:
+    mc_user: minecraft
+    mc_dir: /opt/minecraft
+    mc_service_name: minecraft
+
+  tasks:
+    - name: Ensure APT cache is updated
+      apt:
+        update_cache: true
+      when: ansible_os_family == "Debian"
+
+    - name: Install Java runtime
+      apt:
+        name: openjdk-17-jre-headless
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Create minecraft user
+      user:
+        name: "{{ mc_user }}"
+        shell: /bin/bash
+        create_home: true
+
+    - name: Create minecraft directory
+      file:
+        path: "{{ mc_dir }}"
+        state: directory
+        owner: "{{ mc_user }}"
+        group: "{{ mc_user }}"
+        mode: "0755"
+
+    - name: Download Minecraft server jar (simplified)
+      get_url:
+        url: "https://launcher.mojang.com/v1/objects/fe3d4f8fcf4c4444974e68bbb78a1732ad4d0f90/server.jar"
+        dest: "{{ mc_dir }}/server.jar"
+        mode: "0644"
+      when: mc_type == "vanilla"
+
+    - name: Accept EULA
+      copy:
+        dest: "{{ mc_dir }}/eula.txt"
+        content: "eula={{ 'true' if mc_eula else 'false' }}\n"
+        owner: "{{ mc_user }}"
+        group: "{{ mc_user }}"
+        mode: "0644"
+
+    - name: Render server.properties
+      copy:
+        dest: "{{ mc_dir }}/server.properties"
+        owner: "{{ mc_user }}"
+        group: "{{ mc_user }}"
+        mode: "0644"
+        content: |
+          server-port={{ mc_port }}
+          motd={{ mc_motd }}
+          max-players={{ mc_max_players }}
+          online-mode={{ 'true' if mc_online_mode else 'false' }}
+
+    - name: Open firewall ports for Minecraft
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop: "{{ [mc_port] + (mc_extra_ports | default([])) }}"
+      when: ansible_facts.services is not defined or 'ufw' in ansible_facts.services
+
+    - name: Create systemd service
+      copy:
+        dest: /etc/systemd/system/{{ mc_service_name }}.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Minecraft Server
+          After=network.target
+
+          [Service]
+          WorkingDirectory={{ mc_dir }}
+          User={{ mc_user }}
+          Group={{ mc_user }}
+          Restart=always
+          ExecStart=/usr/bin/java -Xmx{{ mc_jvm_heap }} {{ mc_jvm_flags }} -jar server.jar nogui
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd
+      systemd:
+        daemon_reload: true
+
+    - name: Enable and start minecraft service
+      systemd:
+        name: "{{ mc_service_name }}"
+        enabled: true
+        state: started
+

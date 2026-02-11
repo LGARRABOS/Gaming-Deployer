@@ -1,0 +1,9 @@
+[Unit]
+Description=Update Proxmox Game Deployer from Git
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/bin/bash /opt/proxmox-game-deployer/scripts/auto_update.sh
+
