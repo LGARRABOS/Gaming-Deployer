@@ -156,7 +156,8 @@ func (c *Client) ResizeDisk(ctx context.Context, node string, vmid, diskGB int) 
 	q.Set("disk", "scsi0")
 	q.Set("size", fmt.Sprintf("%dG", diskGB))
 	var taskID string
-	if err := c.do(ctx, http.MethodPost, path, q, &taskID); err != nil {
+	// L'API Proxmox attend une requête PUT sur /resize (équivalent à qm resize).
+	if err := c.do(ctx, http.MethodPut, path, q, &taskID); err != nil {
 		return "", err
 	}
 	return taskID, nil
