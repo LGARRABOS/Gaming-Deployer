@@ -60,6 +60,7 @@ func New(ctx context.Context, dbPath string) (*Server, error) {
 			r.Get("/deployments", s.handleListDeployments)
 			r.Get("/deployments/{id}", s.handleGetDeployment)
 			r.Get("/deployments/{id}/logs", s.handleGetDeploymentLogs)
+			r.Delete("/deployments/{id}", s.handleDeleteDeployment)
 		})
 	})
 

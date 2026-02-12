@@ -33,6 +33,7 @@ const (
 	StatusRunning DeploymentStatus = "running"
 	StatusSuccess DeploymentStatus = "success"
 	StatusFailed  DeploymentStatus = "failed"
+	StatusCancelled DeploymentStatus = "cancelled"
 )
 
 // JobStatus represents job state in jobs table.
@@ -43,6 +44,7 @@ const (
 	JobRunning JobStatus = "running"
 	JobDone    JobStatus = "done"
 	JobFailed  JobStatus = "failed"
+	JobCancelled JobStatus = "cancelled"
 )
 
 // MinecraftDeploymentRequest is the API-level payload for a new deployment.

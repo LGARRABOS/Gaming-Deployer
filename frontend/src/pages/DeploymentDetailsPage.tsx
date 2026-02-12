@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import { apiGet } from "../api/client";
+import { useNavigate, useParams } from "react-router-dom";
+import { apiDelete, apiGet } from "../api/client";
 import { LogsViewer } from "../components/LogsViewer";
 
 interface DeploymentRecord {
@@ -23,6 +23,9 @@ export const DeploymentDetailsPage: React.FC = () => {
   const [deployment, setDeployment] = useState<DeploymentRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!deploymentId) return;
@@ -52,6 +55,22 @@ export const DeploymentDetailsPage: React.FC = () => {
   if (error) return <p className="error">{error}</p>;
   if (!deployment) return <p className="error">Déploiement introuvable</p>;
 
+  const onDelete = async () => {
+    if (!window.confirm("Supprimer ce déploiement et tenter de détruire la VM associée ?")) {
+      return;
+    }
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await apiDelete(`/api/deployments/${deploymentId}`);
+      navigate("/deployments");
+    } catch (e: any) {
+      setDeleteError(e.message ?? "Erreur lors de la suppression du déploiement");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="card">
       <h1>Détails déploiement #{deployment.id}</h1>
@@ -61,6 +80,11 @@ export const DeploymentDetailsPage: React.FC = () => {
       <p>VMID: {deployment.vmid ?? "-"}</p>
       <p>IP: {deployment.ip_address ?? "-"}</p>
       {deployment.error_message && <p className="error">{deployment.error_message}</p>}
+
+      <button onClick={onDelete} disabled={deleting}>
+        {deleting ? "Suppression en cours..." : "Annuler / supprimer ce déploiement"}
+      </button>
+      {deleteError && <p className="error">{deleteError}</p>}
 
       <h2>Logs</h2>
       <LogsViewer deploymentId={deploymentId} />

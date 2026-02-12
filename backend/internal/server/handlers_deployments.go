@@ -10,7 +10,9 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/example/proxmox-game-deployer/internal/auth"
+	"github.com/example/proxmox-game-deployer/internal/config"
 	"github.com/example/proxmox-game-deployer/internal/deploy"
+	"github.com/example/proxmox-game-deployer/internal/proxmox"
 )
 
 // handleValidateDeployment validates inputs without enqueueing a job.
@@ -218,4 +220,81 @@ func (s *Server) handleGetDeploymentLogs(w http.ResponseWriter, r *http.Request)
 
 // Helper to avoid unused import errors for auth in this file.
 var _ = auth.User{}
+
+// handleDeleteDeployment cancels a deployment and attempts to destroy its VM, then
+// marks the deployment as cancelled. Jobs associated with the deployment are
+// moved to "cancelled" as well. This is a best-effort operation: failures when
+// talking to Proxmox are reported but do not prevent local cancellation.
+func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+
+	// Load deployment.
+	row := s.DB.Sql().QueryRowContext(ctx, `
+		SELECT id, status, vmid, request_json
+		FROM deployments
+		WHERE id = ?
+	`, deploymentID)
+
+	var id int64
+	var status string
+	var vmid sql.NullInt64
+	var reqJSON string
+	if err := row.Scan(&id, &status, &vmid, &reqJSON); err != nil {
+		if err == sql.ErrNoRows {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Attempt to destroy the VM if we have a VMID.
+	if vmid.Valid {
+		cfg, err := config.LoadProxmoxConfig(ctx, s.DB)
+		if err == nil {
+			cl, err := proxmox.NewClient(cfg.APIURL, cfg.APITokenID, cfg.APITokenSecret)
+			if err == nil {
+				var req deploy.MinecraftDeploymentRequest
+				if err := json.Unmarshal([]byte(reqJSON), &req); err == nil {
+					node := req.Node
+					if node == "" {
+						node = cfg.DefaultNode
+					}
+					// Try stopping, then deleting the VM. Errors are ignored to not block local cancellation.
+					if upid, err := cl.StopVM(ctx, node, int(vmid.Int64)); err == nil {
+						_ = cl.WaitForTask(ctx, node, upid, 5*time.Minute)
+					}
+					if upid, err := cl.DeleteVM(ctx, node, int(vmid.Int64)); err == nil {
+						_ = cl.WaitForTask(ctx, node, upid, 10*time.Minute)
+					}
+				}
+			}
+		}
+	}
+
+	now := time.Now().UTC()
+
+	// Mark jobs as cancelled.
+	_, _ = s.DB.Sql().ExecContext(ctx, `
+		UPDATE jobs
+		SET status = ?, updated_at = ?
+		WHERE deployment_id = ? AND status IN ('queued', 'running')
+	`, string(deploy.JobCancelled), now, deploymentID)
+
+	// Mark deployment as cancelled.
+	_, _ = s.DB.Sql().ExecContext(ctx, `
+		UPDATE deployments
+		SET status = ?, error_message = ?, updated_at = ?
+		WHERE id = ?
+	`, string(deploy.StatusCancelled), "Déploiement annulé par l'utilisateur", now, deploymentID)
+
+	w.WriteHeader(http.StatusNoContent)
+}
 

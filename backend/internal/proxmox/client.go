@@ -157,6 +157,26 @@ func (c *Client) StartVM(ctx context.Context, node string, vmid int) (string, er
 	return taskID, nil
 }
 
+// StopVM stops the VM.
+func (c *Client) StopVM(ctx context.Context, node string, vmid int) (string, error) {
+	path := fmt.Sprintf("/nodes/%s/qemu/%d/status/stop", node, vmid)
+	var taskID string
+	if err := c.do(ctx, http.MethodPost, path, nil, &taskID); err != nil {
+		return "", err
+	}
+	return taskID, nil
+}
+
+// DeleteVM removes the VM from Proxmox.
+func (c *Client) DeleteVM(ctx context.Context, node string, vmid int) (string, error) {
+	path := fmt.Sprintf("/nodes/%s/qemu/%d", node, vmid)
+	var taskID string
+	if err := c.do(ctx, http.MethodDelete, path, nil, &taskID); err != nil {
+		return "", err
+	}
+	return taskID, nil
+}
+
 // WaitForTask waits for a Proxmox task to complete.
 func (c *Client) WaitForTask(ctx context.Context, node, upid string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
