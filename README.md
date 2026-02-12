@@ -1,101 +1,82 @@
-# Proxmox Game Deployer
+# 🕹 Proxmox Game Deployer
 
-Application web pour déployer automatiquement des VMs Proxmox et des serveurs de jeux, en commençant par Minecraft (Java).
+Déploiement automatique de VMs Proxmox et de serveurs de jeux (Minecraft pour commencer), avec orchestration Go, provisioning Ansible et interface React.
 
-Backend en **Go**, frontend en **React + Vite + TypeScript**, stockage en **SQLite**, provisioning via **Ansible**, exécution sous **systemd** avec script d'auto‑update.
+- **Backend**: Go (HTTP API + worker + SQLite)
+- **Frontend**: React + Vite + TypeScript
+- **DB**: SQLite (config, users, déploiements, logs, jobs)
+- **Provisioning**: Ansible (Ubuntu cloud‑init)
+- **Déploiement**: systemd + script d’auto‑update + CLI `pgdctl`
 
 ---
 
-## Schéma global
+## ✨ Fonctionnalités principales
 
-```text
-          +--------------------------+
-          |      Frontend React      |
-          |  (Vite, TypeScript)      |
-          +-------------+------------+
-                        |
-                        v
-          +-------------+------------+
-          |        API Go HTTP       |
-          |  /api/* (auth, setup,    |
-          |   deployments, logs)     |
-          +-------------+------------+
-                        |
-                        v
-          +-------------+------------+
-          |     SQLite (db/app.db)   |
-          | settings, users,         |
-          | sessions, deployments,   |
-          | deployment_logs, jobs    |
-          +-------------+------------+
-                        |
-                        v
-          +-------------+------------+
-          |   Worker Go (goroutine)  |
-          | - lit jobs en DB         |
-          | - client Proxmox (API)   |
-          | - attend SSH VM          |
-          | - lance Ansible          |
-          +-------------+------------+
-                        |
-                        v
-          +-------------+------------+
-          | Proxmox VE (API token)   |
-          +-------------+------------+
-                        |
-                        v
-          +-------------+------------+
-          |   VM Ubuntu (cloud-init) |
-          |   + Ansible = Minecraft  |
-          +--------------------------+
+- **Setup initial guidé**:
+  - Configuration Proxmox (URL, token, node, storage, bridge, template cloud‑init).
+  - Configuration SSH (user + clé publique).
+  - Création de l’admin avec confirmation de mot de passe.
+  - Test de connexion Proxmox intégré.
+- **Auth & sessions**:
+  - Login admin, session via cookie httpOnly.
+  - Redirection auto vers `/login` si la session expire (401).
+- **Serveurs Minecraft**:
+  - Formulaire complet: ressources VM, IP fixe, réseau, type/version Minecraft, ports, options avancées (EULA, joueurs max, online‑mode, JVM, whitelist, ops…).
+  - Support Forge/Fabric/Paper/Purpur (mod list prévue).
+- **Orchestration Go + Proxmox**:
+  - Clone de template cloud‑init, configuration CPU/RAM/disk/network.
+  - IP statique via `ipconfig0`, démarrage VM, attente SSH.
+  - Jobs en DB + worker goroutine pour exécution asynchrone.
+- **Provisioning Ansible**:
+  - Installation Java, user `minecraft`, `server.properties`, UFW, service systemd.
+- **Suivi en temps réel**:
+  - Liste des déploiements.
+  - Page de détail avec logs temps réel (polling).
+- **Auto‑update**:
+  - Script d’update + service systemd + timer.
+  - CLI `pgdctl` pour mettre à jour en **une seule commande** avec logs.
+
+---
+
+## 🚀 Démarrage rapide (développement)
+
+### Prérequis
+
+- Go 1.21+
+- Node.js + npm
+- Proxmox VE (pour les tests d’API)
+
+### Lancer en dev
+
+```bash
+# Backend
+cd backend
+go run ./cmd/server
+
+# Frontend (dans un autre terminal)
+cd frontend
+npm install
+npm run dev
 ```
 
+Le frontend se lance sur `http://localhost:5173` et proxy `/api` vers le backend (port 5298 par défaut côté binaire, 8080 en mode `make run`).
+
 ---
 
-## Arborescence
+## 📦 Installation en production (VM Ubuntu)
 
-```text
-backend/        # Go backend (API, worker, SQLite, Proxmox client)
-  cmd/server/   # binaire principal
-  internal/
-    auth/       # users + sessions (bcrypt)
-    config/     # settings + chiffrement optionnel
-    db/         # SQLite + migrations
-    deploy/     # jobs, pipeline, worker
-    minecraft/  # provider Minecraft
-    proxmox/    # client Proxmox REST
-    server/     # HTTP, handlers, middlewares
-  web/          # build frontend embarqué (Go embed)
+### Prérequis
 
-frontend/       # React + Vite + TypeScript
-ansible/        # playbook provision_minecraft.yml
-deploy/systemd/ # unités systemd service + timer update
-scripts/        # auto_update.sh
-docs/           # architecture.md
-Makefile
-.env.example
+- VM Ubuntu (héberge **cette** application).
+- Proxmox VE accessible depuis cette VM.
+- Git, Go, Node.js, npm, Ansible:
+
+```bash
+sudo apt update
+sudo apt install -y git golang nodejs npm ansible
 ```
 
----
-
-## Pré‑requis Proxmox
-
-- Proxmox VE accessible via HTTPS (ex: `https://pve.example.com:8006`).
-- Un **API Token** avec les droits sur :
-  - `VM.Audit`, `VM.Clone`, `VM.Config.Network`, `VM.Config.Disk`, `VM.Config.CDROM`, `VM.Start` sur le node cible.
-  - `Sys.Modify` si nécessaire pour les opérations de clone/config.
-- Un **template cloud‑init Ubuntu** (VMID ex: `9000`) avec :
-  - Cloud‑init activé.
-  - SSH autorisé.
-  - Optionnel: user par défaut (`ubuntu`) prévu pour Ansible.
-
----
-
-## Installation (VM Ubuntu)
-
-### Mode automatique (recommandé)
-
-1. **Cloner le repo**
+### 1. Cloner le dépôt
 
 ```bash
 sudo mkdir -p /opt/proxmox-game-deployer
@@ -104,269 +85,212 @@ git clone <URL_DU_REPO> /opt/proxmox-game-deployer
 cd /opt/proxmox-game-deployer
 ```
 
-2. **Configurer l'environnement**
+### 2. Configurer l’environnement
 
 ```bash
 cp .env.example .env
-edit .env   # ajuster DRY_RUN, APP_ENC_KEY, etc.
+edit .env   # ajuste DRY_RUN, APP_ENC_KEY, APP_PROXMOX_INSECURE_TLS, etc.
 ```
 
-3. **Installer l'application (binaire, services systemd, CLI)**
+Variables importantes:
+
+- `DRY_RUN=true` : simule les déploiements (aucun appel Proxmox / Ansible).
+- `APP_ENC_KEY` : phrase de passe forte pour chiffrer la config Proxmox en DB.
+- `APP_PROXMOX_INSECURE_TLS=true` : ignore TLS (certificat auto‑signé Proxmox) sur ton LAN.
+
+### 3. Installation automatique
 
 ```bash
 sudo ./deploy/install.sh
 ```
 
 Ce script:
-- copie le projet dans `/opt/proxmox-game-deployer`,
-- crée l’utilisateur système `proxmox`,
-- installe le binaire `proxmox-game-deployer` dans `/usr/local/bin`,
-- installe/active les services systemd (`game-deployer.service`, timer d’update),
-- installe le CLI `pgdctl` dans `/usr/local/bin`.
 
-4. **Ansible**
+- Copie le projet dans `/opt/proxmox-game-deployer`.
+- Crée l’utilisateur système `proxmox`.
+- Installe le binaire `proxmox-game-deployer` dans `/usr/local/bin`.
+- Installe/active:
+  - `game-deployer.service` (serveur HTTP),
+  - `game-deployer-update.service` (tâche d’auto‑update),
+  - `game-deployer-update.timer` (planification).
+- Installe le CLI `pgdctl` dans `/usr/local/bin`.
+- Build le frontend + backend une première fois.
 
-Installer Ansible sur la VM qui héberge l’app :
-
-```bash
-sudo apt-get update
-sudo apt-get install -y ansible
-```
-
----
-
-## Setup Wizard (première connexion)
-
-1. Ouvre `http://<ip_vm_app>:5298` dans ton navigateur.
-2. Si la DB ne contient aucune config, tu es redirigé vers `/setup`.
-3. Le wizard demande :
-   - Endpoint Proxmox (ex: `https://pve.example.com:8006`),
-   - Token ID + Secret,
-   - Node par défaut, storage, bridge,
-   - VMID du template cloud‑init,
-   - User SSH, clé publique SSH,
-   - Identifiants admin (username + mot de passe).
-4. Bouton **“Tester connexion Proxmox”** :
-   - appelle `/api/setup/test-proxmox`,
-   - retourne `ok=true/false`.
-5. Validation :
-   - sauvegarde de la config Proxmox en DB (`settings`),
-   - création de l’admin (`users`),
-   - flag `app_initialized = true` dans `settings`.
-
-Les secrets Proxmox sont stockés dans SQLite, potentiellement chiffrés si `APP_ENC_KEY` est défini (AES‑GCM).
-
----
-
-## Authentification
-
-- `POST /api/login` avec `username` / `password` crée une session :
-  - mot de passe haché via **bcrypt**,
-  - session stockée en DB (`sessions`) avec TTL (24h),
-  - cookie `session_id` httpOnly, SameSite=Lax.
-- `POST /api/logout` détruit la session.
-- `GET /api/me` retourne l’utilisateur courant.
-
-Les endpoints sensibles (déploiements) utilisent un middleware qui vérifie la session.
-
----
-
-## API principale
-
-- **Setup / Status**
-  - `GET /api/status` → `{ initialized: bool }`
-  - `GET /api/setup/status` → idem
-  - `POST /api/setup/test-proxmox` → `{ ok: bool, error?: string }`
-  - `POST /api/setup/initialize` → payload:
-
-```json
-{
-  "proxmox": {
-    "api_url": "https://pve.example.com:8006",
-    "api_token_id": "root@pam!mytoken",
-    "api_token_secret": "XXX",
-    "default_node": "pve",
-    "default_storage": "local-lvm",
-    "default_bridge": "vmbr0",
-    "template_vmid": 9000,
-    "ssh_user": "ubuntu",
-    "ssh_public_key": "ssh-ed25519 AAAA..."
-  },
-  "admin": {
-    "username": "admin",
-    "password": "motdepasse"
-  }
-}
-```
-
-- **Auth**
-  - `POST /api/login`
-  - `POST /api/logout`
-  - `GET /api/me`
-
-- **Déploiements Minecraft**
-  - `POST /api/deployments/validate` → valide les inputs, ne crée rien.
-  - `POST /api/deployments` → crée un déploiement Minecraft et enregistre un job.
-  - `GET /api/deployments` → liste (statut, vmid, IP…).
-  - `GET /api/deployments/{id}` → détail (inputs/outputs JSON, erreurs…).
-  - `GET /api/deployments/{id}/logs[?after_id=...]` → logs temps réel.
-
-### Exemple payload `POST /api/deployments`
-
-```json
-{
-  "name": "mc-prod-01",
-  "node": "pve",
-  "template_vmid": 9000,
-  "cores": 2,
-  "memory_mb": 4096,
-  "disk_gb": 30,
-  "storage": "local-lvm",
-  "bridge": "vmbr0",
-  "vlan": 10,
-  "ip_address": "192.168.10.50",
-  "cidr": 24,
-  "gateway": "192.168.10.1",
-  "dns": "1.1.1.1",
-  "hostname": "mc-prod-01",
-  "minecraft": {
-    "edition": "java",
-    "version": "1.21.1",
-    "type": "paper",
-    "modded": false,
-    "mods": [],
-    "port": 25565,
-    "extra_ports": [],
-    "eula": true,
-    "max_players": 20,
-    "online_mode": true,
-    "motd": "Bienvenue sur le serveur Minecraft",
-    "whitelist": [],
-    "operators": ["PlayerAdmin"],
-    "jvm_heap": "2G",
-    "jvm_flags": "",
-    "backup_enabled": false,
-    "backup_frequency": "daily",
-    "backup_retention": 7
-  }
-}
-```
-
----
-
-## Orchestration backend
-
-1. **Validation forte**
-   - `ValidateMinecraftRequest` :
-     - vérifie IP/CIDR/gateway/ports,
-     - vérifie ressources minimal (RAM, disque…).
-2. **Enqueue job**
-   - insertion `deployments` (status `queued`) + `jobs` (type `deploy_minecraft`).
-3. **Worker Go**
-   - goroutine qui poll régulièrement la table `jobs`.
-   - pour chaque job `queued` :
-     - charge la config Proxmox (`settings`),
-     - exécute `ProcessJob` :
-       - `NextID` → nouveau VMID,
-       - `CloneVM` depuis template cloud‑init,
-       - `ConfigureVM` (CPU/RAM/disk/net + `ipconfig0`),
-       - `StartVM` + `WaitForTask`,
-       - `WaitForSSH` sur port 22 (IP fixe),
-       - `runAnsibleMinecraft` → `ansible-playbook provision_minecraft.yml`.
-     - écrit les logs dans `deployment_logs`.
-     - met à jour `deployments.status` (`running`/`success`/`failed`).
-4. **DRY_RUN**
-   - si `DRY_RUN=true` :
-     - le pipeline simule les étapes en écrivant les logs,
-     - ne touche pas à Proxmox ni à Ansible.
-
-Idempotence : relancer un job sur une VM déjà provisionnée ne re‑clonera pas la VM (car le job est lié à un `deployment_id` unique). On peut étendre plus tard pour détecter un service déjà présent côté VM via Ansible.
-
----
-
-## Frontend (React + Vite + TypeScript)
-
-Pages principales :
-
-- `/setup` : wizard initial (Proxmox + admin).
-- `/login` : authentification.
-- `/deployments/new/minecraft` : formulaire détaillé de création de serveur Minecraft.
-- `/deployments` : liste des déploiements.
-- `/deployments/:id` : détails + logs temps réel (polling).
-
-Le build front (`npm run build`) sort dans `backend/web/dist`, et le serveur Go embarque ce répertoire via `embed.FS` → **un seul binaire** à déployer.
-
----
-
-## Sécurité
-
-- Mots de passe admins hachés avec **bcrypt**.
-- Sessions via cookie httpOnly, SameSite=Lax, option `APP_SECURE_COOKIE` pour forcer Secure en prod HTTPS.
-- Config Proxmox stockée en DB :
-  - si `APP_ENC_KEY` défini, chiffrement AES‑GCM via clé dérivée SHA‑256.
-  - sinon, stockage texte + recommandation permissions strictes (`chmod 600` sur la DB).
-- Validation forte :
-  - adresses IP (IPv4), CIDR, ports (1–65535), ressources.
-- Protection CSRF :
-  - API uniquement accessible depuis même origine,
-  - cookie SameSite=Lax + absence de CORS large limite les risques.  
-  - Un jeton CSRF explicite peut être ajouté plus tard si besoin.
-
----
-
-## Auto‑update (systemd + scripts)
-
-- Script `scripts/auto_update.sh` :
-  - `git fetch/reset` sur `main`,
-  - `npm install && npm run build` (frontend),
-  - `go build -o /usr/local/bin/proxmox-game-deployer ./cmd/server` (backend),
-  - `systemctl restart game-deployer.service`,
-  - logs dans `/var/log/proxmox-game-deployer-update.log`.
-- Script CLI `scripts/pgdctl` :
-  - `sudo ./scripts/pgdctl update` → déclenche une mise à jour (`game-deployer-update.service`) et affiche les logs.
-  - `sudo ./scripts/pgdctl status` → statut du service.
-  - `sudo ./scripts/pgdctl restart` → redémarre le service.
-  - `sudo ./scripts/pgdctl logs` → logs en temps réel.
-- Unités :
-  - `game-deployer.service` : l’application elle‑même.
-  - `game-deployer-update.service` : lance le script.
-  - `game-deployer-update.timer` : déclenche périodiquement (toutes les heures).
-
----
-
-## Développement local
-
-1. **Backend**
+Tu peux vérifier:
 
 ```bash
+pgdctl status
+```
+
+---
+
+## 🔁 Mise à jour (pull + build + restart)
+
+Workflow typique:
+
+- Sur ta machine de dev:
+
+```bash
+git commit -am "fix: quelque chose"
+git push origin main
+```
+
+- Sur la VM Ubuntu:
+
+```bash
+pgdctl update
+```
+
+Cette commande:
+
+- déclenche `game-deployer-update.service`,
+- fait `git fetch/reset` sur `main`,
+- rebuild frontend + backend,
+- redémarre `game-deployer.service`,
+- affiche les logs de l’update en temps réel (`journalctl -f`).
+
+Autres commandes utiles:
+
+```bash
+pgdctl status    # statut du service
+pgdctl restart   # redémarrer le service
+pgdctl logs      # logs en temps réel du service applicatif
+```
+
+---
+
+## 🧩 Setup Wizard (première connexion)
+
+1. Accède à `http://<IP_VM_APP>:5298` (ou ton domaine).
+2. Si aucune config n’est en DB, tu es redirigé vers `/setup`.
+3. Remplis les champs Proxmox:
+   - **API URL**: `https://pve.example.com:8006`
+   - **Token ID**: ex. `root@pam!game-deployer`
+   - **Token Secret**: valeur secrète générée dans Proxmox.
+   - **Node par défaut**: nom du node (ex. `pve`).
+   - **Storage par défaut**: ex. `local-lvm`.
+   - **Bridge par défaut**: ex. `vmbr0`.
+   - **Template VMID (cloud-init)**: VMID de ton template Ubuntu cloud‑init (ex. `9000`).
+   - **Utilisateur SSH**: user cloud‑init (ex. `ubuntu`).
+   - **Clé publique SSH**: clé publique de la VM app (celle utilisée par Ansible).
+4. Clique sur **“Tester connexion Proxmox”**:
+   - si tout est OK, tu vois une confirmation,
+   - sinon, message d’erreur Proxmox/TLS.
+5. Crée le compte admin:
+   - username + mot de passe,
+   - confirmation du mot de passe (détection d’erreur de frappe).
+6. Valide → l’app enregistre la config + admin, puis te redirige vers `/login`.
+
+---
+
+## 🔐 Authentification & sécurité
+
+- Admin stocké dans `users` (password **bcrypt**).
+- Sessions dans `sessions` avec TTL (24h) + cookie `session_id` httpOnly, SameSite=Lax.
+- Si une requête backend renvoie **401**, le frontend redirige automatiquement vers `/login`.
+- Config Proxmox en DB:
+  - si `APP_ENC_KEY` défini → chiffrée avec AES‑GCM (clé dérivée SHA‑256),
+  - sinon → stockée en clair (recommandé: permissions strictes sur le fichier DB).
+
+---
+
+## ⚙️ Architecture technique
+
+### Backend (`backend/`)
+
+- `cmd/server/main.go` : point d’entrée, lecture config env, démarrage HTTP + worker jobs.
+- `internal/db` : wrapper SQLite + migrations automatiques.
+- `internal/auth` : users, sessions, bcrypt.
+- `internal/config` : settings (Proxmox, flags), chiffrement optionnel.
+- `internal/proxmox` : client HTTP (token API, TLS configurable).
+- `internal/minecraft` : modèle de configuration Minecraft → variables Ansible.
+- `internal/deploy` :
+  - `EnqueueMinecraftDeployment` : création en DB (`deployments` + `jobs`),
+  - `Worker` : goroutine qui poll la table `jobs`,
+  - `ProcessJob` : pipeline Proxmox + Ansible,
+  - `deployment_logs` : logs append‑only.
+- `internal/server` : routes HTTP, middleware, handlers (setup, auth, déploiements).
+- `web/` : build frontend embarqué via `embed.FS` (binaire unique).
+
+### Frontend (`frontend/`)
+
+- React + Vite + TypeScript.
+- Pages:
+  - `/setup` : wizard initial.
+  - `/login` : connexion admin.
+  - `/deployments` : liste des déploiements.
+  - `/deployments/new/minecraft` : formulaire de déploiement Minecraft.
+  - `/deployments/:id` : détail + logs temps réel.
+- Client API:
+  - `api/client.ts` gère les erreurs, redirige vers `/login` en cas de 401.
+
+### Provisioning (`ansible/`)
+
+- `provision_minecraft.yml` :
+  - installe Java,
+  - crée user `minecraft`,
+  - déploie le `server.jar` (vanilla pour l’instant),
+  - écrit `eula.txt`, `server.properties`,
+  - ouvre les ports avec UFW (si activé),
+  - crée et active le service systemd `minecraft.service`.
+
+---
+
+## 🗄 Modèle de données (SQLite)
+
+- `settings` : configuration globale (Proxmox, flags, etc.).
+- `users` : comptes admins.
+- `sessions` : sessions HTTP.
+- `deployments` : enregistre chaque déploiement (inputs/outputs JSON, VMID, IP, statut).
+- `deployment_logs` : logs append‑only par déploiement.
+- `jobs` : file interne de jobs à exécuter (worker Go).
+
+---
+
+## 🧪 Mode DRY_RUN
+
+Pour tester le pipeline sans toucher Proxmox:
+
+- Dans `.env`:
+
+```bash
+DRY_RUN=true
+```
+
+Dans ce mode:
+
+- les jobs s’exécutent,
+- les logs sont écrits en DB,
+- mais il n’y a pas:
+  - de clone/config/démarrage de VM,
+  - ni d’appel Ansible réel.
+
+Pratique pour tester l’UI, les jobs, et la partie logs sans risquer de polluer ton cluster Proxmox.
+
+---
+
+## 🛠 Développement local (rappel)
+
+```bash
+# Backend
 cd backend
 go run ./cmd/server
-```
 
-2. **Frontend**
-
-```bash
+# Frontend
 cd frontend
 npm install
 npm run dev
 ```
 
-Le `vite.config.ts` proxe `/api` vers `http://localhost:5298`, tu peux donc développer le frontend en hot‑reload.
-
-3. **Build global**
-
-```bash
-make build
-```
+Le frontend est servi par Vite sur `http://localhost:5173`, avec proxy `/api` vers ton backend.
 
 ---
 
-## Extensibilité vers d'autres jeux
+## 📌 Roadmap (idées d’extensions)
 
-- Ajouter un nouveau provider dans `internal/<jeu>` avec une struct de config et une méthode `ToAnsibleVars`.
-- Créer un playbook Ansible dédié dans `ansible/`.
-- Ajouter un type de job dans `internal/deploy` et ses handlers.
-- Ajouter les écrans dans `frontend/src/pages`.
-
-L’architecture actuelle (jobs en DB, worker Go, provisioning Ansible) est conçue pour accueillir ces extensions sans remettre en cause le cœur du système.
+- Support complet des autres jeux via providers (`internal/<game>`).
+- Multi‑tenancy / multi‑utilisateurs.
+- Plus d’options réseau (VLAN par défaut, pools IP).
+- Backups gérés (snapshots Proxmox / rsync / rclone).
+- UI temps réel (WebSocket) pour les logs au lieu de polling.
 
