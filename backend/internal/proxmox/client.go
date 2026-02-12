@@ -112,6 +112,10 @@ func (c *Client) CloneVM(ctx context.Context, node string, templateVMID, newVMID
 	q.Set("newid", fmt.Sprintf("%d", newVMID))
 	q.Set("name", name)
 	if storage != "" {
+		// Quand on précise un storage, on force un full clone. Proxmox ne
+		// permet pas de spécifier "storage" pour les linked clones, d'où
+		// l'erreur "parameter 'storage' not allowed for linked clones".
+		q.Set("full", "1")
 		q.Set("storage", storage)
 	}
 	var taskID string
