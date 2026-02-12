@@ -4,6 +4,12 @@ export interface ApiError {
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
+    // Redirection douce vers /login en cas de 401.
+    if (res.status === 401) {
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login";
+      }
+    }
     let msg = res.statusText;
     try {
       const data = await res.json();

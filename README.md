@@ -334,7 +334,7 @@ Le build front (`npm run build`) sort dans `backend/web/dist`, et le serveur Go 
 
 ---
 
-## Auto‑update (systemd + script)
+## Auto‑update (systemd + scripts)
 
 - Script `scripts/auto_update.sh` :
   - `git fetch/reset` sur `main`,
@@ -342,6 +342,11 @@ Le build front (`npm run build`) sort dans `backend/web/dist`, et le serveur Go 
   - `go build -o /usr/local/bin/proxmox-game-deployer ./cmd/server` (backend),
   - `systemctl restart game-deployer.service`,
   - logs dans `/var/log/proxmox-game-deployer-update.log`.
+- Script CLI `scripts/pgdctl` :
+  - `sudo ./scripts/pgdctl update` → déclenche une mise à jour (`game-deployer-update.service`) et affiche les logs.
+  - `sudo ./scripts/pgdctl status` → statut du service.
+  - `sudo ./scripts/pgdctl restart` → redémarre le service.
+  - `sudo ./scripts/pgdctl logs` → logs en temps réel.
 - Unités :
   - `game-deployer.service` : l’application elle‑même.
   - `game-deployer-update.service` : lance le script.

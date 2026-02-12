@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+SERVICE_NAME="game-deployer.service"
+UPDATE_SERVICE_NAME="game-deployer-update.service"
+
+usage() {
+  cat <<EOF
+pgdctl - Proxmox Game Deployer control script
+
+Usage:
+  pgdctl update      # pull + build + restart (via systemd update service)
+  pgdctl status      # show main service status
+  pgdctl restart     # restart main service
+  pgdctl logs        # tail main service logs
+
+Tips:
+  Run with sudo when required, e.g.:
+    sudo $0 update
+EOF
+}
+
+cmd="${1:-help}"
+
+case "$cmd" in
+  update)
+    echo "[pgdctl] Triggering update via $UPDATE_SERVICE_NAME..."
+    systemctl start "$UPDATE_SERVICE_NAME"
+    echo "[pgdctl] Update service started. Showing recent logs (Ctrl+C to stop):"
+    journalctl -u "$UPDATE_SERVICE_NAME" -n 20 -f
+    ;;
+  status)
+    systemctl status "$SERVICE_NAME" --no-pager
+    ;;
+  restart)
+    echo "[pgdctl] Restarting $SERVICE_NAME..."
+    systemctl restart "$SERVICE_NAME"
+    systemctl status "$SERVICE_NAME" --no-pager
+    ;;
+  logs)
+    echo "[pgdctl] Tailing logs for $SERVICE_NAME (Ctrl+C to stop)..."
+    journalctl -u "$SERVICE_NAME" -n 50 -f
+    ;;
+  help|--help|-h)
+    usage
+    ;;
+  *)
+    echo "Unknown command: $cmd"
+    usage
+    exit 1
+    ;;
+esac
+
