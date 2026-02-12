@@ -28,6 +28,7 @@ export const SetupWizard: React.FC = () => {
   });
   const [adminUser, setAdminUser] = useState("");
   const [adminPass, setAdminPass] = useState("");
+  const [adminPassConfirm, setAdminPassConfirm] = useState("");
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -66,6 +67,11 @@ export const SetupWizard: React.FC = () => {
     setSaving(true);
     setError(null);
     try {
+      if (adminPass !== adminPassConfirm) {
+        setError("Les mots de passe administrateur ne correspondent pas.");
+        setSaving(false);
+        return;
+      }
       await apiPost<{ ok: boolean }>("/api/setup/initialize", {
         proxmox: form,
         admin: { username: adminUser, password: adminPass },
@@ -155,6 +161,15 @@ export const SetupWizard: React.FC = () => {
             type="password"
             value={adminPass}
             onChange={(e) => setAdminPass(e.target.value)}
+            required
+          />
+        </label>
+        <label>
+          Confirmer le mot de passe
+          <input
+            type="password"
+            value={adminPassConfirm}
+            onChange={(e) => setAdminPassConfirm(e.target.value)}
             required
           />
         </label>

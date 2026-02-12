@@ -93,6 +93,8 @@ Makefile
 
 ## Installation (VM Ubuntu)
 
+### Mode automatique (recommandé)
+
 1. **Cloner le repo**
 
 ```bash
@@ -106,45 +108,23 @@ cd /opt/proxmox-game-deployer
 
 ```bash
 cp .env.example .env
-edit .env   # ajuster APP_DB_PATH, DRY_RUN, APP_ENC_KEY, etc.
+edit .env   # ajuster DRY_RUN, APP_ENC_KEY, etc.
 ```
 
-3. **Build backend + frontend (binaire unique)**
+3. **Installer l'application (binaire, services systemd, CLI)**
 
 ```bash
-make build
+sudo ./deploy/install.sh
 ```
 
-Cela:
-- build le frontend vers `backend/web/dist` (Vite),
-- build le serveur Go qui embarque le frontend (Go embed).
+Ce script:
+- copie le projet dans `/opt/proxmox-game-deployer`,
+- crée l’utilisateur système `proxmox`,
+- installe le binaire `proxmox-game-deployer` dans `/usr/local/bin`,
+- installe/active les services systemd (`game-deployer.service`, timer d’update),
+- installe le CLI `pgdctl` dans `/usr/local/bin`.
 
-4. **Installer le binaire**
-
-```bash
-sudo cp backend/server /usr/local/bin/proxmox-game-deployer
-```
-
-5. **Créer l'utilisateur système**
-
-```bash
-sudo useradd -r -d /opt/proxmox-game-deployer -s /usr/sbin/nologin proxmox || true
-sudo chown -R proxmox:proxmox /opt/proxmox-game-deployer
-```
-
-6. **Installer les unités systemd**
-
-```bash
-sudo cp deploy/systemd/game-deployer.service /etc/systemd/system/
-sudo cp deploy/systemd/game-deployer-update.service /etc/systemd/system/
-sudo cp deploy/systemd/game-deployer-update.timer /etc/systemd/system/
-
-sudo systemctl daemon-reload
-sudo systemctl enable --now game-deployer.service
-sudo systemctl enable --now game-deployer-update.timer
-```
-
-7. **Ansible**
+4. **Ansible**
 
 Installer Ansible sur la VM qui héberge l’app :
 
