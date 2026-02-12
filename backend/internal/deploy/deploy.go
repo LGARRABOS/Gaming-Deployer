@@ -321,6 +321,9 @@ func runAnsibleMinecraft(ctx context.Context, req MinecraftDeploymentRequest, ho
 	args = append(args, "--extra-vars", string(extraJSON))
 
 	cmd := exec.CommandContext(ctx, "ansible-playbook", args...)
+	// Désactive le host key checking pour éviter les prompts interactifs
+	// lors de la première connexion aux VMs nouvellement créées.
+	cmd.Env = append(os.Environ(), "ANSIBLE_HOST_KEY_CHECKING=False")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
