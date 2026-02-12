@@ -254,6 +254,22 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 			return err
 		}
 
+		// Ajuste la taille du disque principal (scsi0) si une valeur spécifique
+		// a été demandée dans le formulaire. On passe une taille absolue en Go,
+		// ce qui correspond à: qm resize <vmid> scsi0 <diskGB>G.
+		if req.DiskGB > 0 {
+			appendLog(ctx, db, *deploymentID, "info", fmt.Sprintf("Resizing VM disk to %dG", req.DiskGB))
+			if upid, err := c.ResizeDisk(ctx, req.Node, vmid, req.DiskGB); err != nil {
+				appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Resize disk failed: %v", err))
+				return err
+			} else if upid != "" {
+				if err := c.WaitForTask(ctx, req.Node, upid, 30*time.Minute); err != nil {
+					appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Resize disk task failed: %v", err))
+					return err
+				}
+			}
+		}
+
 		appendLog(ctx, db, *deploymentID, "info", "Starting VM")
 		upid, err = c.StartVM(ctx, req.Node, vmid)
 		if err != nil {

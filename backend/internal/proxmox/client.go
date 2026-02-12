@@ -121,7 +121,7 @@ func (c *Client) CloneVM(ctx context.Context, node string, templateVMID, newVMID
 	return taskID, nil
 }
 
-// ConfigureVM sets CPU, memory, disk, and network including cloud-init ipconfig0.
+// ConfigureVM sets CPU, memory and network including cloud-init ipconfig0.
 func (c *Client) ConfigureVM(ctx context.Context, node string, vmid int, cores, memoryMB, diskGB int, bridge string, vlanTag *int, ipCIDR, gateway string) error {
 	path := fmt.Sprintf("/nodes/%s/qemu/%d/config", node, vmid)
 	q := url.Values{}
@@ -131,11 +131,6 @@ func (c *Client) ConfigureVM(ctx context.Context, node string, vmid int, cores, 
 	if memoryMB > 0 {
 		q.Set("memory", fmt.Sprintf("%d", memoryMB))
 	}
-	// NOTE: on ne modifie plus la taille du disque via scsi0 ici pour éviter
-	// des erreurs de validation Proxmox (linked/full clone, storage, etc.).
-	// La taille de disque reste celle définie dans le template. Une
-	// interface d'administration pourra gérer plus tard les ajustements de
-	// stockage (ex: via qm resize) de manière contrôlée.
 	net := fmt.Sprintf("virtio,bridge=%s", bridge)
 	if vlanTag != nil {
 		net = net + fmt.Sprintf(",tag=%d", *vlanTag)
@@ -147,6 +142,24 @@ func (c *Client) ConfigureVM(ctx context.Context, node string, vmid int, cores, 
 	// Tag VMs déployées par l'application pour les filtrer facilement.
 	q.Set("tags", "Minecraft-Auto-Serveur")
 	return c.do(ctx, http.MethodPost, path, q, nil)
+}
+
+// ResizeDisk adjusts the size of a VM disk using the Proxmox resize endpoint.
+// For simplicity we resize scsi0 to an absolute size in gigabytes, similar to:
+//   qm resize <vmid> scsi0 100G
+func (c *Client) ResizeDisk(ctx context.Context, node string, vmid, diskGB int) (string, error) {
+	if diskGB <= 0 {
+		return "", nil
+	}
+	path := fmt.Sprintf("/nodes/%s/qemu/%d/resize", node, vmid)
+	q := url.Values{}
+	q.Set("disk", "scsi0")
+	q.Set("size", fmt.Sprintf("%dG", diskGB))
+	var taskID string
+	if err := c.do(ctx, http.MethodPost, path, q, &taskID); err != nil {
+		return "", err
+	}
+	return taskID, nil
 }
 
 // StartVM starts the VM.
