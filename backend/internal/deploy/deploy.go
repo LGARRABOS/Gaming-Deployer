@@ -243,6 +243,11 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 			return err
 		}
 
+		// À ce stade, la VM existe : on enregistre immédiatement le VMID et l'IP
+		// dans la DB afin que les suppressions/cancellations puissent la cibler
+		// même si des erreurs surviennent plus tard dans le pipeline.
+		updateDeploymentStatus(ctx, db, *deploymentID, StatusRunning, &vmid, &ip, nil, nil)
+
 		appendLog(ctx, db, *deploymentID, "info", "Configuring VM resources and cloud-init networking")
 		if err := c.ConfigureVM(ctx, req.Node, vmid, req.Cores, req.MemoryMB, req.DiskGB, req.Bridge, req.VLAN, ipCIDR, req.Gateway); err != nil {
 			appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Configure VM failed: %v", err))
