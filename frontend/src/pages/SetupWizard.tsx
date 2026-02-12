@@ -135,15 +135,6 @@ export const SetupWizard: React.FC = () => {
           Utilisateur SSH
           <input name="ssh_user" value={form.ssh_user} onChange={onChange} required />
         </label>
-        <label>
-          Clé publique SSH
-          <input
-            name="ssh_public_key"
-            value={form.ssh_public_key}
-            onChange={onChange}
-            required
-          />
-        </label>
 
         <button type="button" onClick={testConnection} disabled={testing}>
           {testing ? "Test en cours..." : "Tester connexion Proxmox"}

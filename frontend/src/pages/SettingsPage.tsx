@@ -73,7 +73,7 @@ export const SettingsPage: React.FC = () => {
       );
       setAppPublicKey(res.public_key);
       setSshKeyMessage(
-        "Nouvelle clé SSH générée. Pense à la copier dans la configuration Cloud-Init de Proxmox."
+        `Nouvelle clé SSH générée pour l'utilisateur "${form?.ssh_user}". Pense à la copier dans la configuration Cloud-Init de Proxmox (clé publique + utilisateur).`
       );
     } catch (e: any) {
       setError(e.message ?? "Erreur lors de la régénération de la clé SSH");
@@ -209,15 +209,6 @@ export const SettingsPage: React.FC = () => {
             required
           />
         </label>
-        <label>
-          Clé publique SSH
-          <input
-            name="ssh_public_key"
-            value={form.ssh_public_key}
-            onChange={onChange}
-            required
-          />
-        </label>
 
         <button type="button" onClick={testConnection} disabled={testing}>
           {testing ? "Test en cours..." : "Tester connexion Proxmox"}
@@ -237,9 +228,9 @@ export const SettingsPage: React.FC = () => {
         <h2>Clé SSH de l'application</h2>
         <p className="hint">
           Cette clé est utilisée par l'application pour se connecter aux VMs
-          via Ansible. Copie la clé publique ci-dessous dans le champ{" "}
-          <code>SSH public key</code> de la configuration Cloud-Init de Proxmox
-          pour ton template.
+          via Ansible. Copie la clé publique ci-dessous et associe-la à
+          l'utilisateur SSH <code>{form.ssh_user}</code> dans la configuration
+          Cloud-Init de Proxmox pour ton template.
         </p>
 
         <label>
