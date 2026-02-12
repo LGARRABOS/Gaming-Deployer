@@ -323,10 +323,14 @@ func runAnsibleMinecraft(ctx context.Context, req MinecraftDeploymentRequest, ho
 	cmd := exec.CommandContext(ctx, "ansible-playbook", args...)
 	env := append(os.Environ(), "ANSIBLE_HOST_KEY_CHECKING=False")
 	// Permet de préciser explicitement la clé privée SSH à utiliser pour
-	// Ansible (utile car le service tourne sous l'utilisateur systemd
-	// 'proxmox' qui n'a pas de clé dans ~/.ssh). Exemple dans .env:
-	//   APP_SSH_KEY_PATH=/opt/proxmox-game-deployer/ssh/id_ed25519
-	if keyPath := os.Getenv("APP_SSH_KEY_PATH"); keyPath != "" {
+	// Ansible. Si APP_SSH_KEY_PATH n'est pas défini, on retombe sur le chemin
+	// par défaut utilisé par le module sshkeys (./ssh/id_ed25519) afin que la
+	// clé générée via l'UI soit automatiquement réutilisée.
+	keyPath := os.Getenv("APP_SSH_KEY_PATH")
+	if keyPath == "" {
+		keyPath = "./ssh/id_ed25519"
+	}
+	if keyPath != "" {
 		env = append(env, "ANSIBLE_PRIVATE_KEY_FILE="+keyPath)
 	}
 	cmd.Env = env
