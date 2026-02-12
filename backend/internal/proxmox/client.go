@@ -189,7 +189,10 @@ func (c *Client) WaitForTask(ctx context.Context, node, upid string, timeout tim
 		var task struct {
 			Status string `json:"status"`
 		}
-		path := fmt.Sprintf("/nodes/%s/tasks/%s/status", node, url.PathEscape(upid))
+		// Important: Proxmox attend l'UPID brut dans l'URL (avec les ':'),
+		// et n'aime pas forcément la version échappée. On utilise donc
+		// directement la chaîne telle que renvoyée par l'API.
+		path := fmt.Sprintf("/nodes/%s/tasks/%s/status", node, upid)
 		if err := c.do(ctx, http.MethodGet, path, nil, &task); err != nil {
 			return err
 		}
