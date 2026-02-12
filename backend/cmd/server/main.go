@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -13,6 +15,11 @@ import (
 )
 
 func main() {
+	// Charge un éventuel fichier .env local pour faciliter la config
+	// (utile en dev et en production si le service ne définit pas toutes
+	// les variables d'environnement).
+	loadEnvFile(".env")
+
 	addr := getenv("APP_LISTEN_ADDR", ":5298")
 	dbPath := getenv("APP_DB_PATH", "./data/app.db")
 
@@ -55,5 +62,43 @@ func getenv(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// loadEnvFile charge un fichier .env simple (KEY=VALUE, avec support des
+// commentaires en fin de ligne) dans les variables d'environnement du
+// processus. Les clés déjà présentes ne sont pas écrasées.
+func loadEnvFile(path string) {
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		// Retire les commentaires inline (# ...) si présents.
+		if i := strings.Index(line, "#"); i >= 0 {
+			line = strings.TrimSpace(line[:i])
+		}
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+		if key == "" {
+			continue
+		}
+		if _, exists := os.LookupEnv(key); !exists {
+			_ = os.Setenv(key, val)
+		}
+	}
 }
 
