@@ -321,9 +321,15 @@ func runAnsibleMinecraft(ctx context.Context, req MinecraftDeploymentRequest, ho
 	args = append(args, "--extra-vars", string(extraJSON))
 
 	cmd := exec.CommandContext(ctx, "ansible-playbook", args...)
-	// Désactive le host key checking pour éviter les prompts interactifs
-	// lors de la première connexion aux VMs nouvellement créées.
-	cmd.Env = append(os.Environ(), "ANSIBLE_HOST_KEY_CHECKING=False")
+	env := append(os.Environ(), "ANSIBLE_HOST_KEY_CHECKING=False")
+	// Permet de préciser explicitement la clé privée SSH à utiliser pour
+	// Ansible (utile car le service tourne sous l'utilisateur systemd
+	// 'proxmox' qui n'a pas de clé dans ~/.ssh). Exemple dans .env:
+	//   APP_SSH_KEY_PATH=/opt/proxmox-game-deployer/ssh/id_ed25519
+	if keyPath := os.Getenv("APP_SSH_KEY_PATH"); keyPath != "" {
+		env = append(env, "ANSIBLE_PRIVATE_KEY_FILE="+keyPath)
+	}
+	cmd.Env = env
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
