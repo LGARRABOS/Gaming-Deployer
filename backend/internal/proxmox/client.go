@@ -2,11 +2,13 @@ package proxmox
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 )
 
@@ -27,12 +29,23 @@ func NewClient(rawURL, tokenID, tokenSecret string) (*Client, error) {
 	if u.Scheme == "" {
 		u.Scheme = "https"
 	}
+	// TLS config: par défaut on vérifie le certificat.
+	// Si APP_PROXMOX_INSECURE_TLS=true, on ignore les erreurs TLS
+	// (pratique pour un lab avec certificat auto-signé).
+	insecure := os.Getenv("APP_PROXMOX_INSECURE_TLS") == "true"
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: insecure, //nolint:gosec
+		},
+	}
+
 	return &Client{
 		baseURL:   u,
 		tokenID:   tokenID,
 		tokenSecret: tokenSecret,
 		http: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout:   30 * time.Second,
+			Transport: tr,
 		},
 	}, nil
 }
