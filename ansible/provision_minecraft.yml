@@ -65,7 +65,9 @@
         rule: allow
         port: "{{ item }}"
         proto: tcp
-      loop: "{{ [mc_port] + (mc_extra_ports | default([])) }}"
+      # mc_extra_ports peut être null/None si l'API ne fournit pas de liste.
+      # default([], true) force alors une liste vide pour éviter l'erreur de concaténation.
+      loop: "{{ [mc_port] + (mc_extra_ports | default([], true)) }}"
       when: ansible_facts.services is not defined or 'ufw' in ansible_facts.services
 
     - name: Create systemd service
