@@ -111,13 +111,9 @@ func (c *Client) CloneVM(ctx context.Context, node string, templateVMID, newVMID
 	q := url.Values{}
 	q.Set("newid", fmt.Sprintf("%d", newVMID))
 	q.Set("name", name)
-	if storage != "" {
-		// Quand on précise un storage, on force un full clone. Proxmox ne
-		// permet pas de spécifier "storage" pour les linked clones, d'où
-		// l'erreur "parameter 'storage' not allowed for linked clones".
-		q.Set("full", "1")
-		q.Set("storage", storage)
-	}
+	// NOTE: on ne force plus le storage ici pour éviter les combinaisons
+	// invalides selon le type de template (linked/full clone). Proxmox
+	// utilisera le même storage que le template par défaut.
 	var taskID string
 	if err := c.do(ctx, http.MethodPost, path, q, &taskID); err != nil {
 		return "", err
