@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/example/proxmox-game-deployer/internal/auth"
 	"github.com/example/proxmox-game-deployer/internal/config"
 	"github.com/example/proxmox-game-deployer/internal/proxmox"
+	"github.com/example/proxmox-game-deployer/internal/sshkeys"
 )
 
 type statusResponse struct {
@@ -41,6 +43,10 @@ type testProxmoxRequest struct {
 type genericOKResponse struct {
 	OK    bool   `json:"ok"`
 	Error string `json:"error,omitempty"`
+}
+
+type sshKeyResponse struct {
+	PublicKey string `json:"public_key"`
 }
 
 // handleTestProxmox tests Proxmox credentials.
@@ -199,4 +205,25 @@ func (s *Server) handleUpdateProxmoxConfig(w http.ResponseWriter, r *http.Reques
 
 	writeJSON(w, http.StatusOK, genericOKResponse{OK: true})
 }
+
+// handleGetSSHKey returns the app-managed SSH public key, generating it if needed.
+func (s *Server) handleGetSSHKey(w http.ResponseWriter, r *http.Request) {
+	pub, err := sshkeys.EnsureKeyPair()
+	if err != nil {
+		http.Error(w, "failed to get ssh key: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, sshKeyResponse{PublicKey: strings.TrimSpace(pub)})
+}
+
+// handleRegenerateSSHKey forces regeneration of the SSH key pair and returns the new public key.
+func (s *Server) handleRegenerateSSHKey(w http.ResponseWriter, r *http.Request) {
+	pub, err := sshkeys.RegenerateKeyPair()
+	if err != nil {
+		http.Error(w, "failed to regenerate ssh key: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, sshKeyResponse{PublicKey: strings.TrimSpace(pub)})
+}
+
 

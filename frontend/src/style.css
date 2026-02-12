@@ -283,12 +283,26 @@ label {
 }
 
 input,
-select {
+select,
+textarea {
   padding: 0.45rem 0.6rem;
   border-radius: 0.4rem;
   border: 1px solid #1f2937;
   background: #020617;
   color: #e2e8f0;
+}
+
+.ssh-pubkey-textarea {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: 0.8rem;
+}
+
+.section-separator {
+  margin: 1.75rem 0 1.25rem;
+  border: none;
+  border-top: 1px dashed #1f2937;
 }
 
 input[type="checkbox"] {

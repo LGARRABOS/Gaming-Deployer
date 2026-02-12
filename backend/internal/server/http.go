@@ -58,6 +58,8 @@ func New(ctx context.Context, dbPath string) (*Server, error) {
 			r.Get("/setup/config", s.handleGetProxmoxConfig)
 			r.Post("/setup/config", s.handleUpdateProxmoxConfig)
 			r.Post("/setup/test-proxmox-current", s.handleTestProxmoxCurrent)
+			r.Get("/setup/ssh-key", s.handleGetSSHKey)
+			r.Post("/setup/ssh-key/regenerate", s.handleRegenerateSSHKey)
 			r.Post("/deployments/validate", s.handleValidateDeployment)
 			r.Post("/deployments", s.handleCreateDeployment)
 			r.Get("/deployments", s.handleListDeployments)

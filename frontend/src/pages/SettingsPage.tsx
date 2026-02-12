@@ -20,6 +20,8 @@ export const SettingsPage: React.FC = () => {
   const [testing, setTesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [appPublicKey, setAppPublicKey] = useState<string | null>(null);
+  const [sshKeyMessage, setSshKeyMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -30,6 +32,17 @@ export const SettingsPage: React.FC = () => {
           // On ne renvoie pas le secret existant, donc on laisse le champ vide
           // pour indiquer "inchangé" tant que l'utilisateur ne saisit rien.
           setForm({ ...cfg, api_token_secret: "" });
+        }
+        // Charger (et éventuellement générer) la clé publique gérée par l'app.
+        try {
+          const keyRes = await apiGet<{ public_key: string }>(
+            "/api/setup/ssh-key"
+          );
+          if (!cancelled) {
+            setAppPublicKey(keyRes.public_key);
+          }
+        } catch (e) {
+          // On ne bloque pas la page si la récup de la clé échoue.
         }
       } catch (e: any) {
         if (!cancelled) setError(e.message ?? "Erreur chargement configuration");
@@ -48,6 +61,23 @@ export const SettingsPage: React.FC = () => {
     setForm((f) =>
       f ? { ...f, [name]: name === "template_vmid" ? Number(value) : value } : f
     );
+  };
+
+  const regenerateSSHKey = async () => {
+    setSshKeyMessage(null);
+    setError(null);
+    try {
+      const res = await apiPost<{ public_key: string }>(
+        "/api/setup/ssh-key/regenerate",
+        {}
+      );
+      setAppPublicKey(res.public_key);
+      setSshKeyMessage(
+        "Nouvelle clé SSH générée. Pense à la copier dans la configuration Cloud-Init de Proxmox."
+      );
+    } catch (e: any) {
+      setError(e.message ?? "Erreur lors de la régénération de la clé SSH");
+    }
   };
 
   const testConnection = async () => {
@@ -200,6 +230,34 @@ export const SettingsPage: React.FC = () => {
           {saving ? "Enregistrement..." : "Enregistrer la configuration"}
         </button>
       </form>
+
+      <hr className="section-separator" />
+
+      <section>
+        <h2>Clé SSH de l'application</h2>
+        <p className="hint">
+          Cette clé est utilisée par l'application pour se connecter aux VMs
+          via Ansible. Copie la clé publique ci-dessous dans le champ{" "}
+          <code>SSH public key</code> de la configuration Cloud-Init de Proxmox
+          pour ton template.
+        </p>
+
+        <label>
+          Clé publique gérée par l'application
+          <textarea
+            readOnly
+            value={appPublicKey ?? ""}
+            className="ssh-pubkey-textarea"
+            rows={4}
+          />
+        </label>
+
+        <button type="button" onClick={regenerateSSHKey}>
+          Régénérer la clé SSH de l'application
+        </button>
+
+        {sshKeyMessage && <p className="hint">{sshKeyMessage}</p>}
+      </section>
     </div>
   );
 };
