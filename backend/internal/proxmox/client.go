@@ -142,6 +142,8 @@ func (c *Client) ConfigureVM(ctx context.Context, node string, vmid int, cores, 
 	if ipCIDR != "" && gateway != "" {
 		q.Set("ipconfig0", fmt.Sprintf("ip=%s,gw=%s", ipCIDR, gateway))
 	}
+	// Tag VMs déployées par l'application pour les filtrer facilement.
+	q.Set("tags", "Minecraft-Auto-Serveur")
 	return c.do(ctx, http.MethodPost, path, q, nil)
 }
 

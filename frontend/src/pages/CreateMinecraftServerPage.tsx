@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { apiPost } from "../api/client";
 
 interface MinecraftConfig {
@@ -31,6 +32,7 @@ interface FormState {
 }
 
 export const CreateMinecraftServerPage: React.FC = () => {
+  const navigate = useNavigate();
   const [form, setForm] = useState<FormState>({
     name: "",
     cores: 2,
@@ -85,6 +87,7 @@ export const CreateMinecraftServerPage: React.FC = () => {
       await apiPost("/api/deployments/validate", form);
       const res = await apiPost<{ deployment_id: number }>("/api/deployments", form);
       setSuccess(`Déploiement créé (ID ${res.deployment_id})`);
+      navigate(`/deployments/${res.deployment_id}`);
     } catch (e: any) {
       setError(e.message ?? "Erreur lors de la création du déploiement");
     } finally {
