@@ -64,6 +64,30 @@ func (s *Server) handleTestProxmox(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, genericOKResponse{OK: true})
 }
 
+// handleTestProxmoxCurrent teste la connexion Proxmox en utilisant la
+// configuration actuellement stockée en base (y compris le secret), sans
+// le renvoyer au frontend.
+func (s *Server) handleTestProxmoxCurrent(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	cfg, err := config.LoadProxmoxConfig(ctx, s.DB)
+	if err != nil {
+		writeJSON(w, http.StatusOK, genericOKResponse{OK: false, Error: err.Error()})
+		return
+	}
+	cl, err := proxmox.NewClient(cfg.APIURL, cfg.APITokenID, cfg.APITokenSecret)
+	if err != nil {
+		writeJSON(w, http.StatusOK, genericOKResponse{OK: false, Error: err.Error()})
+		return
+	}
+	tctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	if err := cl.TestConnection(tctx); err != nil {
+		writeJSON(w, http.StatusOK, genericOKResponse{OK: false, Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, genericOKResponse{OK: true})
+}
+
 // initializeRequest contains wizard payload.
 type initializeRequest struct {
 	Proxmox config.ProxmoxConfig `json:"proxmox"`

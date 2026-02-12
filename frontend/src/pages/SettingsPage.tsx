@@ -56,14 +56,24 @@ export const SettingsPage: React.FC = () => {
     setTestResult(null);
     setError(null);
     try {
-      const res = await apiPost<{ ok: boolean; error?: string }>(
-        "/api/setup/test-proxmox",
-        {
-          api_url: form.api_url,
-          api_token_id: form.api_token_id,
-          api_token_secret: form.api_token_secret,
-        }
-      );
+      let res: { ok: boolean; error?: string };
+      if (form.api_token_secret && form.api_token_secret.trim() !== "") {
+        // L'utilisateur teste un nouveau secret explicite.
+        res = await apiPost<{ ok: boolean; error?: string }>(
+          "/api/setup/test-proxmox",
+          {
+            api_url: form.api_url,
+            api_token_id: form.api_token_id,
+            api_token_secret: form.api_token_secret,
+          }
+        );
+      } else {
+        // Utilise la configuration existante côté serveur (secret déjà stocké).
+        res = await apiPost<{ ok: boolean; error?: string }>(
+          "/api/setup/test-proxmox-current",
+          {}
+        );
+      }
       if (res.ok) setTestResult("Connexion Proxmox OK");
       else setTestResult(`Échec connexion Proxmox: ${res.error ?? "inconnue"}`);
     } catch (e: any) {

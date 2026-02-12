@@ -57,6 +57,7 @@ func New(ctx context.Context, dbPath string) (*Server, error) {
 			r.Use(s.AuthMiddleware)
 			r.Get("/setup/config", s.handleGetProxmoxConfig)
 			r.Post("/setup/config", s.handleUpdateProxmoxConfig)
+			r.Post("/setup/test-proxmox-current", s.handleTestProxmoxCurrent)
 			r.Post("/deployments/validate", s.handleValidateDeployment)
 			r.Post("/deployments", s.handleCreateDeployment)
 			r.Get("/deployments", s.handleListDeployments)
