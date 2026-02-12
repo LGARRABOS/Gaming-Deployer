@@ -15,10 +15,11 @@ import (
 )
 
 func main() {
-	// Charge un éventuel fichier .env local pour faciliter la config
-	// (utile en dev et en production si le service ne définit pas toutes
-	// les variables d'environnement).
+	// Charge un éventuel fichier .env pour faciliter la config.
+	// On tente d'abord le répertoire courant (dev), puis le chemin
+	// standard de prod (/opt/proxmox-game-deployer/.env).
 	loadEnvFile(".env")
+	loadEnvFile("/opt/proxmox-game-deployer/.env")
 
 	addr := getenv("APP_LISTEN_ADDR", ":5298")
 	dbPath := getenv("APP_DB_PATH", "./data/app.db")
@@ -47,6 +48,7 @@ func main() {
 	}()
 
 	log.Printf("server started on %s", addr)
+	log.Printf("config: APP_NET_CIDR=%q APP_NET_GATEWAY=%q", os.Getenv("APP_NET_CIDR"), os.Getenv("APP_NET_GATEWAY"))
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
