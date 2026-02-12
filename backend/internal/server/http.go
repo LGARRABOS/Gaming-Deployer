@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -62,13 +63,12 @@ func New(ctx context.Context, dbPath string) (*Server, error) {
 		})
 	})
 
-	// Static frontend: serve embedded build (backend/web/dist).
+	// Static frontend: serve embedded build (backend/web/dist) with SPA fallback.
 	sub, err := fs.Sub(web.Dist, "dist")
 	if err != nil {
 		log.Fatalf("failed to load embedded frontend: %v", err)
 	}
-	fileServer := http.FileServer(http.FS(sub))
-	r.Handle("/*", fileServer)
+	r.Handle("/*", spaFileServer(sub))
 
 	s.Router = r
 	return s, nil
@@ -114,6 +114,40 @@ func setSessionCookie(w http.ResponseWriter, sessionID string, expires time.Time
 		SameSite: http.SameSiteLaxMode,
 		Secure:   os.Getenv("APP_SECURE_COOKIE") == "true",
 		Expires:  expires,
+	})
+}
+
+// spaFileServer serves static files and falls back to index.html for unknown paths
+// so that React Router can handle client-side routes like /login, /deployments, etc.
+func spaFileServer(content fs.FS) http.Handler {
+	fileServer := http.FileServer(http.FS(content))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Let the API and other non-GET methods through untouched.
+		if strings.HasPrefix(r.URL.Path, "/api/") || r.Method != http.MethodGet {
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+
+		path := strings.TrimPrefix(r.URL.Path, "/")
+		if path == "" {
+			path = "index.html"
+		}
+
+		// Try to open the requested asset; if it fails, fall back to index.html.
+		if f, err := content.Open(path); err == nil {
+			_ = f.Close()
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+
+		index, err := fs.ReadFile(content, "index.html")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(index)
 	})
 }
 

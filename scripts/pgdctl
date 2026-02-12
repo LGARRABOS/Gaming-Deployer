@@ -29,8 +29,24 @@ case "$cmd" in
   update)
     echo "[pgdctl] Triggering update via $UPDATE_SERVICE_NAME..."
     systemctl start "$UPDATE_SERVICE_NAME"
-    echo "[pgdctl] Update service started. Showing recent logs (Ctrl+C to stop):"
-    journalctl -u "$UPDATE_SERVICE_NAME" -n 20 -f
+    echo "[pgdctl] Waiting for update service to complete..."
+    # Wait until service becomes inactive or failed
+    while true; do
+      state="$(systemctl is-active "$UPDATE_SERVICE_NAME" || true)"
+      if [[ "$state" == "inactive" || "$state" == "failed" ]]; then
+        break
+      fi
+      sleep 2
+    done
+    echo "[pgdctl] Update service finished with state: $state"
+    echo
+    echo "[pgdctl] Last logs from $UPDATE_SERVICE_NAME:"
+    journalctl -u "$UPDATE_SERVICE_NAME" -n 30 --no-pager || true
+    if [[ "$state" == "failed" ]]; then
+      echo "[pgdctl] Update FAILED. See logs above."
+      exit 1
+    fi
+    echo "[pgdctl] Update completed successfully."
     ;;
   status)
     systemctl status "$SERVICE_NAME" --no-pager
