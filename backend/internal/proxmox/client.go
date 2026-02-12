@@ -131,9 +131,11 @@ func (c *Client) ConfigureVM(ctx context.Context, node string, vmid int, cores, 
 	if memoryMB > 0 {
 		q.Set("memory", fmt.Sprintf("%d", memoryMB))
 	}
-	if diskGB > 0 {
-		q.Set("scsi0", fmt.Sprintf("local-lvm:%d", diskGB))
-	}
+	// NOTE: on ne modifie plus la taille du disque via scsi0 ici pour éviter
+	// des erreurs de validation Proxmox (linked/full clone, storage, etc.).
+	// La taille de disque reste celle définie dans le template. Une
+	// interface d'administration pourra gérer plus tard les ajustements de
+	// stockage (ex: via qm resize) de manière contrôlée.
 	net := fmt.Sprintf("virtio,bridge=%s", bridge)
 	if vlanTag != nil {
 		net = net + fmt.Sprintf(",tag=%d", *vlanTag)
