@@ -288,12 +288,18 @@ func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) 
 		WHERE deployment_id = ? AND status IN ('queued', 'running')
 	`, string(deploy.JobCancelled), now, deploymentID)
 
-	// Mark deployment as cancelled.
+	// Marquer le déploiement comme annulé puis le supprimer de la DB afin
+	// qu'il disparaisse du dashboard. Les logs associés seront supprimés
+	// via la contrainte de clé étrangère (ON DELETE CASCADE).
 	_, _ = s.DB.Sql().ExecContext(ctx, `
 		UPDATE deployments
 		SET status = ?, error_message = ?, updated_at = ?
 		WHERE id = ?
 	`, string(deploy.StatusCancelled), "Déploiement annulé par l'utilisateur", now, deploymentID)
+
+	_, _ = s.DB.Sql().ExecContext(ctx, `
+		DELETE FROM deployments WHERE id = ?
+	`, deploymentID)
 
 	w.WriteHeader(http.StatusNoContent)
 }
