@@ -13,7 +13,7 @@ interface Props {
 }
 
 export const LogsViewer: React.FC<Props> = ({ deploymentId }) => {
-  const [logs, setLogs] = useState<LogItem[]>([]);
+  const [logs, setLogs] = useState<LogItem[] | null>(null);
   const [lastId, setLastId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -24,10 +24,11 @@ export const LogsViewer: React.FC<Props> = ({ deploymentId }) => {
           lastId == null
             ? `/api/deployments/${deploymentId}/logs`
             : `/api/deployments/${deploymentId}/logs?after_id=${lastId}`;
-        const data = await apiGet<LogItem[]>(path);
-        if (!cancelled && data.length > 0) {
-          setLogs((prev) => [...prev, ...data]);
-          setLastId(data[data.length - 1].id);
+        const data = await apiGet<LogItem[] | null>(path);
+        const arr = Array.isArray(data) ? data : [];
+        if (!cancelled && arr.length > 0) {
+          setLogs((prev) => [ ...(prev ?? []), ...arr ]);
+          setLastId(arr[arr.length - 1].id);
         }
       } catch {
         // ignore polling errors
@@ -41,16 +42,18 @@ export const LogsViewer: React.FC<Props> = ({ deploymentId }) => {
     };
   }, [deploymentId, lastId]);
 
+  const list = logs ?? [];
+
   return (
     <div className="logs-viewer">
-      {logs.map((l) => (
+      {list.map((l) => (
         <div key={l.id} className={`log log-${l.level.toLowerCase()}`}>
           <span className="log-ts">{new Date(l.ts).toLocaleTimeString()}</span>
           <span className="log-level">{l.level.toUpperCase()}</span>
           <span className="log-message">{l.message}</span>
         </div>
       ))}
-      {logs.length === 0 && <p>Aucun log pour le moment.</p>}
+      {list.length === 0 && <p>Aucun log pour le moment.</p>}
     </div>
   );
 };

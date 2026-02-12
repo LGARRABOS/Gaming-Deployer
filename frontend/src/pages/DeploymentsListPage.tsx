@@ -14,15 +14,17 @@ interface DeploymentListItem {
 }
 
 export const DeploymentsListPage: React.FC = () => {
-  const [items, setItems] = useState<DeploymentListItem[]>([]);
+  const [items, setItems] = useState<DeploymentListItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    apiGet<DeploymentListItem[]>("/api/deployments")
+    apiGet<DeploymentListItem[] | null>("/api/deployments")
       .then((data) => {
-        if (!cancelled) setItems(data);
+        if (!cancelled) {
+          setItems(Array.isArray(data) ? data : []);
+        }
       })
       .catch((e: any) => {
         if (!cancelled) setError(e.message ?? "Erreur chargement déploiements");
@@ -37,6 +39,8 @@ export const DeploymentsListPage: React.FC = () => {
 
   if (loading) return <p>Chargement des déploiements...</p>;
   if (error) return <p className="error">{error}</p>;
+
+  const list = items ?? [];
 
   return (
     <div className="card">
@@ -55,7 +59,7 @@ export const DeploymentsListPage: React.FC = () => {
           </tr>
         </thead>
         <tbody>
-          {items.map((d) => (
+          {list.map((d) => (
             <tr key={d.id}>
               <td>{d.id}</td>
               <td>{d.game}</td>
