@@ -24,38 +24,18 @@ interface MinecraftConfig {
 
 interface FormState {
   name: string;
-  node: string;
-  template_vmid: number;
   cores: number;
   memory_mb: number;
   disk_gb: number;
-  storage: string;
-  bridge: string;
-  vlan?: number;
-  ip_address: string;
-  cidr: number;
-  gateway: string;
-  dns: string;
-  hostname: string;
   minecraft: MinecraftConfig;
 }
 
 export const CreateMinecraftServerPage: React.FC = () => {
   const [form, setForm] = useState<FormState>({
     name: "",
-    node: "",
-    template_vmid: 9000,
     cores: 2,
     memory_mb: 4096,
     disk_gb: 30,
-    storage: "",
-    bridge: "",
-    vlan: undefined,
-    ip_address: "",
-    cidr: 24,
-    gateway: "",
-    dns: "1.1.1.1",
-    hostname: "",
     minecraft: {
       edition: "java",
       version: "1.21.1",
@@ -95,14 +75,6 @@ export const CreateMinecraftServerPage: React.FC = () => {
       .map((v) => v.trim())
       .filter(Boolean);
 
-  const parsePorts = (value: string): number[] =>
-    value
-      .split(",")
-      .map((v) => v.trim())
-      .filter(Boolean)
-      .map((v) => Number(v))
-      .filter((n) => !Number.isNaN(n));
-
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -130,88 +102,35 @@ export const CreateMinecraftServerPage: React.FC = () => {
           <input value={form.name} onChange={(e) => update("name", e.target.value)} required />
         </label>
         <label>
-          Node
-          <input value={form.node} onChange={(e) => update("node", e.target.value)} />
-        </label>
-        <label>
-          Template VMID
-          <input
-            type="number"
-            value={form.template_vmid}
-            onChange={(e) => update("template_vmid", Number(e.target.value))}
-          />
-        </label>
-        <label>
           CPU (cores)
           <input
             type="number"
             value={form.cores}
             onChange={(e) => update("cores", Number(e.target.value))}
+            min={1}
+            max={4}
           />
         </label>
         <label>
-          RAM (MB)
+          RAM (MB) (max 32768)
           <input
             type="number"
             value={form.memory_mb}
             onChange={(e) => update("memory_mb", Number(e.target.value))}
+            min={1024}
+            max={32768}
           />
         </label>
         <label>
-          Disque (GB)
+          Disque (GB) (max 500)
           <input
             type="number"
             value={form.disk_gb}
             onChange={(e) => update("disk_gb", Number(e.target.value))}
+            min={10}
+            max={500}
           />
         </label>
-        <label>
-          Storage
-          <input value={form.storage} onChange={(e) => update("storage", e.target.value)} />
-        </label>
-        <label>
-          Bridge
-          <input value={form.bridge} onChange={(e) => update("bridge", e.target.value)} />
-        </label>
-        <label>
-          VLAN (optionnel)
-          <input
-            type="number"
-            value={form.vlan ?? ""}
-            onChange={(e) => update("vlan", e.target.value ? Number(e.target.value) : undefined)}
-          />
-        </label>
-
-        <h2>Réseau</h2>
-        <label>
-          IP fixe
-          <input
-            value={form.ip_address}
-            onChange={(e) => update("ip_address", e.target.value)}
-            required
-          />
-        </label>
-        <label>
-          CIDR
-          <input
-            type="number"
-            value={form.cidr}
-            onChange={(e) => update("cidr", Number(e.target.value))}
-          />
-        </label>
-        <label>
-          Gateway
-          <input value={form.gateway} onChange={(e) => update("gateway", e.target.value)} required />
-        </label>
-        <label>
-          DNS
-          <input value={form.dns} onChange={(e) => update("dns", e.target.value)} />
-        </label>
-        <label>
-          Hostname
-          <input value={form.hostname} onChange={(e) => update("hostname", e.target.value)} />
-        </label>
-
         <h2>Minecraft</h2>
         <label>
           Version
@@ -233,21 +152,8 @@ export const CreateMinecraftServerPage: React.FC = () => {
             <option value="fabric">Fabric</option>
           </select>
         </label>
-        <label>
-          Port Minecraft
-          <input
-            type="number"
-            value={form.minecraft.port}
-            onChange={(e) => updateMinecraft("port", Number(e.target.value))}
-          />
-        </label>
-        <label>
-          Ports additionnels (séparés par des virgules)
-          <input
-            value={form.minecraft.extra_ports.join(",")}
-            onChange={(e) => updateMinecraft("extra_ports", parsePorts(e.target.value))}
-          />
-        </label>
+        {/* Le port Minecraft et les ports additionnels sont maintenant
+            attribués automatiquement côté serveur. */}
         <label>
           EULA accepté
           <input
@@ -293,45 +199,7 @@ export const CreateMinecraftServerPage: React.FC = () => {
             onChange={(e) => updateMinecraft("operators", parseList(e.target.value))}
           />
         </label>
-        <label>
-          Mémoire JVM (ex: 2G)
-          <input
-            value={form.minecraft.jvm_heap}
-            onChange={(e) => updateMinecraft("jvm_heap", e.target.value)}
-          />
-        </label>
-        <label>
-          Flags JVM
-          <input
-            value={form.minecraft.jvm_flags}
-            onChange={(e) => updateMinecraft("jvm_flags", e.target.value)}
-          />
-        </label>
-
-        <h2>Backups</h2>
-        <label>
-          Activer les backups
-          <input
-            type="checkbox"
-            checked={form.minecraft.backup_enabled}
-            onChange={(e) => updateMinecraft("backup_enabled", e.target.checked)}
-          />
-        </label>
-        <label>
-          Fréquence (ex: daily, weekly)
-          <input
-            value={form.minecraft.backup_frequency}
-            onChange={(e) => updateMinecraft("backup_frequency", e.target.value)}
-          />
-        </label>
-        <label>
-          Rétention (nombre de backups)
-          <input
-            type="number"
-            value={form.minecraft.backup_retention}
-            onChange={(e) => updateMinecraft("backup_retention", Number(e.target.value))}
-          />
-        </label>
+        {/* Backups configurés automatiquement (24h, rétention 2 jours). */}
 
         {error && <p className="error">{error}</p>}
         {success && <p className="success">{success}</p>}

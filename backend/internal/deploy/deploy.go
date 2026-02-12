@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -155,6 +157,51 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 		req.TemplateVM = cfg.TemplateVMID
 	}
 
+	// Auto-fill network settings if not provided.
+	if req.IPAddress == "" {
+		ip, cidr, gw, dns, hostname, err := autoNetwork(ctx, db)
+		if err != nil {
+			return err
+		}
+		req.IPAddress = ip
+		req.CIDR = cidr
+		req.Gateway = gw
+		req.DNS = dns
+		if req.Hostname == "" {
+			req.Hostname = hostname
+		}
+	}
+
+	// Auto JVM heap if not set: VM memory - 2GB, minimum 1G.
+	if req.Minecraft.JVMHeap == "" {
+		heapMB := req.MemoryMB - 2048
+		if heapMB < 1024 {
+			heapMB = 1024
+		}
+		req.Minecraft.JVMHeap = fmt.Sprintf("%dM", heapMB)
+	}
+
+	// Auto port: if 0, base on deployment id (25565 + id).
+	if req.Minecraft.Port == 0 && j.DeploymentID != nil {
+		base := 25565
+		port := base + int(*j.DeploymentID)
+		if port > 65535 {
+			port = base + (int(*j.DeploymentID) % 1000)
+		}
+		req.Minecraft.Port = port
+	}
+
+	// Auto backups every 24h with 2 days retention if not set.
+	if !req.Minecraft.BackupEnabled {
+		req.Minecraft.BackupEnabled = true
+		if req.Minecraft.BackupFrequency == "" {
+			req.Minecraft.BackupFrequency = "24h"
+		}
+		if req.Minecraft.BackupRetention == 0 {
+			req.Minecraft.BackupRetention = 2
+		}
+	}
+
 	c, err := proxmox.NewClient(cfg.APIURL, cfg.APITokenID, cfg.APITokenSecret)
 	if err != nil {
 		return err
@@ -262,5 +309,77 @@ func runAnsibleMinecraft(ctx context.Context, req MinecraftDeploymentRequest, ho
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// autoNetwork allocates a fixed IP and related settings from an internal pool.
+// It uses environment variables:
+//  - APP_NET_CIDR (e.g. 192.168.1.0/24)
+//  - APP_NET_GATEWAY
+//  - APP_NET_DNS
+//  - APP_HOSTNAME_PREFIX (optional, default "mc-")
+// This is a simple allocator based on IPs already stored in the deployments table.
+func autoNetwork(ctx context.Context, db Store) (string, int, string, string, string, error) {
+	baseCIDR := os.Getenv("APP_NET_CIDR")
+	if baseCIDR == "" {
+		return "", 0, "", "", "", fmt.Errorf("APP_NET_CIDR is not set")
+	}
+	gw := os.Getenv("APP_NET_GATEWAY")
+	if gw == "" {
+		return "", 0, "", "", "", fmt.Errorf("APP_NET_GATEWAY is not set")
+	}
+	dns := os.Getenv("APP_NET_DNS")
+	if dns == "" {
+		dns = gw
+	}
+	prefix := os.Getenv("APP_HOSTNAME_PREFIX")
+	if prefix == "" {
+		prefix = "mc-"
+	}
+
+	ip, ipNet, err := net.ParseCIDR(baseCIDR)
+	if err != nil {
+		return "", 0, "", "", "", fmt.Errorf("invalid APP_NET_CIDR: %w", err)
+	}
+
+	// Collect used IPs from deployments.
+	row := db.QueryRowContext(ctx, `
+		SELECT GROUP_CONCAT(ip_address, ',') FROM deployments WHERE ip_address IS NOT NULL
+	`)
+	var usedConcat sql.NullString
+	_ = row.Scan(&usedConcat)
+
+	used := map[string]struct{}{}
+	if usedConcat.Valid {
+		for _, s := range strings.Split(usedConcat.String, ",") {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				used[s] = struct{}{}
+			}
+		}
+	}
+
+	// Start scanning from base+10 up to end of subnet.
+	ip = ip.To4()
+	if ip == nil {
+		return "", 0, "", "", "", fmt.Errorf("APP_NET_CIDR must be IPv4")
+	}
+
+	start := ip.Mask(ipNet.Mask)
+	start[3] += 10
+
+	for i := 10; i < 250; i++ {
+		addr := net.IPv4(start[0], start[1], start[2], byte(i))
+		if !ipNet.Contains(addr) {
+			break
+		}
+		s := addr.String()
+		if _, ok := used[s]; !ok {
+			hostname := prefix + strings.ReplaceAll(s, ".", "-")
+			_, bits := ipNet.Mask.Size()
+			return s, bits, gw, dns, hostname, nil
+		}
+	}
+
+	return "", 0, "", "", "", fmt.Errorf("no free IP found in %s", baseCIDR)
 }
 
