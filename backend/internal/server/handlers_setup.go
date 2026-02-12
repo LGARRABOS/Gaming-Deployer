@@ -125,3 +125,54 @@ func (s *Server) handleInitialize(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, genericOKResponse{OK: true})
 }
 
+// handleGetProxmoxConfig retourne la configuration actuelle stockée dans la DB.
+// Nécessite une authentification (configurée dans http.go).
+func (s *Server) handleGetProxmoxConfig(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	cfg, err := config.LoadProxmoxConfig(ctx, s.DB)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// On ne masque pas ici le secret, mais le frontend ne l'affiche pas
+	// tant que l'utilisateur ne le modifie pas.
+	writeJSON(w, http.StatusOK, cfg)
+}
+
+// updateConfigRequest contient la charge utile pour la mise à jour de
+// la configuration Proxmox existante.
+type updateConfigRequest struct {
+	Proxmox config.ProxmoxConfig `json:"proxmox"`
+}
+
+// handleUpdateProxmoxConfig permet de mettre à jour la configuration
+// Proxmox/SSH après le setup initial. Si le token secret est vide,
+// l'ancien secret est conservé.
+func (s *Server) handleUpdateProxmoxConfig(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req updateConfigRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	// Charger la config existante pour conserver le secret si non fourni.
+	existing, err := config.LoadProxmoxConfig(ctx, s.DB)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if req.Proxmox.APITokenSecret == "" && existing != nil {
+		req.Proxmox.APITokenSecret = existing.APITokenSecret
+	}
+
+	if err := config.SaveProxmoxConfig(ctx, s.DB, req.Proxmox); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, genericOKResponse{OK: true})
+}
+

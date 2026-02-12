@@ -272,7 +272,7 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 	if dryRun {
 		appendLog(ctx, db, *deploymentID, "info", "DRY_RUN enabled: skipping actual ansible-playbook invocation")
 	} else {
-		if err := runAnsibleMinecraft(ctx, req, ip); err != nil {
+		if err := runAnsibleMinecraft(ctx, req, ip, cfg.SSHUser); err != nil {
 			appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Ansible provisioning failed: %v", err))
 			return err
 		}
@@ -292,7 +292,7 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 }
 
 // runAnsibleMinecraft spawns ansible-playbook with the relevant variables.
-func runAnsibleMinecraft(ctx context.Context, req MinecraftDeploymentRequest, hostIP string) error {
+func runAnsibleMinecraft(ctx context.Context, req MinecraftDeploymentRequest, hostIP, sshUser string) error {
 	playbook := "./ansible/provision_minecraft.yml"
 	if v := os.Getenv("ANSIBLE_PLAYBOOK_PATH"); v != "" {
 		playbook = v
@@ -300,14 +300,22 @@ func runAnsibleMinecraft(ctx context.Context, req MinecraftDeploymentRequest, ho
 
 	extraVars := req.Minecraft.ToAnsibleVars()
 	extraVars["target_host"] = hostIP
-	extraVars["target_user"] = "minecraft"
 
 	extraJSON, err := json.Marshal(extraVars)
 	if err != nil {
 		return err
 	}
 
-	cmd := exec.CommandContext(ctx, "ansible-playbook", playbook, "-i", fmt.Sprintf("%s,", hostIP), "--extra-vars", string(extraJSON))
+	args := []string{
+		playbook,
+		"-i", fmt.Sprintf("%s,", hostIP),
+	}
+	if sshUser != "" {
+		args = append(args, "-u", sshUser)
+	}
+	args = append(args, "--extra-vars", string(extraJSON))
+
+	cmd := exec.CommandContext(ctx, "ansible-playbook", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

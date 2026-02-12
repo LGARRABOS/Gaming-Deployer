@@ -55,6 +55,8 @@ func New(ctx context.Context, dbPath string) (*Server, error) {
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.AuthMiddleware)
+			r.Get("/setup/config", s.handleGetProxmoxConfig)
+			r.Post("/setup/config", s.handleUpdateProxmoxConfig)
 			r.Post("/deployments/validate", s.handleValidateDeployment)
 			r.Post("/deployments", s.handleCreateDeployment)
 			r.Get("/deployments", s.handleListDeployments)

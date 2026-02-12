@@ -256,6 +256,8 @@ func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Attempt to destroy the VM if we have a VMID.
+	vmDeletedOK := true
+
 	if vmid.Valid {
 		cfg, err := config.LoadProxmoxConfig(ctx, s.DB)
 		if err == nil {
@@ -267,12 +269,21 @@ func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) 
 					if node == "" {
 						node = cfg.DefaultNode
 					}
-					// Try stopping, then deleting the VM. Errors are ignored to not block local cancellation.
+					// Try stopping, then deleting la VM. En cas d'erreur, on garde
+					// le déploiement visible et on remonte l'erreur à l'appelant.
 					if upid, err := cl.StopVM(ctx, node, int(vmid.Int64)); err == nil {
-						_ = cl.WaitForTask(ctx, node, upid, 5*time.Minute)
+						if err := cl.WaitForTask(ctx, node, upid, 5*time.Minute); err != nil {
+							vmDeletedOK = false
+						}
+					} else {
+						vmDeletedOK = false
 					}
 					if upid, err := cl.DeleteVM(ctx, node, int(vmid.Int64)); err == nil {
-						_ = cl.WaitForTask(ctx, node, upid, 10*time.Minute)
+						if err := cl.WaitForTask(ctx, node, upid, 10*time.Minute); err != nil {
+							vmDeletedOK = false
+						}
+					} else {
+						vmDeletedOK = false
 					}
 				}
 			}
@@ -288,15 +299,20 @@ func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) 
 		WHERE deployment_id = ? AND status IN ('queued', 'running')
 	`, string(deploy.JobCancelled), now, deploymentID)
 
-	// Marquer le déploiement comme annulé puis le supprimer de la DB afin
-	// qu'il disparaisse du dashboard. Les logs associés seront supprimés
-	// via la contrainte de clé étrangère (ON DELETE CASCADE).
-	_, _ = s.DB.Sql().ExecContext(ctx, `
-		UPDATE deployments
-		SET status = ?, error_message = ?, updated_at = ?
-		WHERE id = ?
-	`, string(deploy.StatusCancelled), "Déploiement annulé par l'utilisateur", now, deploymentID)
+	if !vmDeletedOK && vmid.Valid {
+		// Si la suppression VM a échoué, on laisse le déploiement dans la DB
+		// avec un message d'erreur explicite.
+		_, _ = s.DB.Sql().ExecContext(ctx, `
+			UPDATE deployments
+			SET status = ?, error_message = ?, updated_at = ?
+			WHERE id = ?
+		`, string(deploy.StatusFailed), "Échec de la suppression de la VM sur Proxmox. Vérifiez Proxmox avant de réessayer.", now, deploymentID)
+		http.Error(w, "Échec de la suppression de la VM sur Proxmox", http.StatusBadGateway)
+		return
+	}
 
+	// Si la VM est supprimée (ou n'a jamais été créée), on peut retirer
+	// le déploiement du dashboard.
 	_, _ = s.DB.Sql().ExecContext(ctx, `
 		DELETE FROM deployments WHERE id = ?
 	`, deploymentID)

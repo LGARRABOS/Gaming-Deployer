@@ -56,6 +56,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             >
               Nouveau serveur Minecraft
             </Link>
+            <Link
+              to="/settings"
+              className={isActive("/settings") ? "sidebar-link sidebar-link--active" : "sidebar-link"}
+            >
+              Paramètres
+            </Link>
           </nav>
           <button className="sidebar-logout" onClick={onLogout}>
             Déconnexion
