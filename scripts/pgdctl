@@ -12,7 +12,7 @@ usage() {
 pgdctl - Proxmox Game Deployer control script
 
 Usage:
-  pgdctl update      # pull + build + restart (via systemd update service)
+  pgdctl update      # pull + build + restart (manuel, verbeux)
   pgdctl status      # show main service status
   pgdctl restart     # restart main service
   pgdctl logs        # tail main service logs
@@ -27,26 +27,41 @@ cmd="${1:-help}"
 
 case "$cmd" in
   update)
-    echo "[pgdctl] Triggering update via $UPDATE_SERVICE_NAME..."
-    systemctl start "$UPDATE_SERVICE_NAME"
-    echo "[pgdctl] Waiting for update service to complete..."
-    # Wait until service becomes inactive or failed
-    while true; do
-      state="$(systemctl is-active "$UPDATE_SERVICE_NAME" || true)"
-      if [[ "$state" == "inactive" || "$state" == "failed" ]]; then
-        break
-      fi
-      sleep 2
-    done
-    echo "[pgdctl] Update service finished with state: $state"
-    echo
-    echo "[pgdctl] Last logs from $UPDATE_SERVICE_NAME:"
-    journalctl -u "$UPDATE_SERVICE_NAME" -n 30 --no-pager || true
-    if [[ "$state" == "failed" ]]; then
-      echo "[pgdctl] Update FAILED. See logs above."
+    echo "==> Proxmox Game Deployer - manual update"
+    echo "Repository: $REPO_DIR"
+    echo ""
+
+    cd "$REPO_DIR"
+
+    echo "[1/4] Updating Git repository (origin/main)..."
+    git fetch origin main
+    git reset --hard origin/main
+    echo "    Git repository is up to date."
+    echo ""
+
+    echo "[2/4] Building frontend..."
+    cd "$REPO_DIR/frontend"
+    npm install --omit=dev=false
+    npm run build
+    echo "    Frontend build completed."
+    echo ""
+
+    echo "[3/4] Building backend..."
+    cd "$REPO_DIR/backend"
+    go build -o /usr/local/bin/proxmox-game-deployer ./cmd/server
+    echo "    Backend build completed."
+    echo ""
+
+    echo "[4/4] Restarting systemd service: $SERVICE_NAME"
+    systemctl restart "$SERVICE_NAME"
+    systemctl is-active "$SERVICE_NAME" >/dev/null 2>&1 || {
+      echo "!! Service $SERVICE_NAME is not active after restart."
+      systemctl status "$SERVICE_NAME" --no-pager || true
       exit 1
-    fi
-    echo "[pgdctl] Update completed successfully."
+    }
+    echo "    Service restarted successfully."
+    echo ""
+    echo "==> Update completed successfully."
     ;;
   status)
     systemctl status "$SERVICE_NAME" --no-pager
