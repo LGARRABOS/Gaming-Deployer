@@ -230,6 +230,31 @@ button:disabled {
   color: #bfdbfe;
 }
 
+.confirm-delete {
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #991b1b;
+  background: rgba(127, 29, 29, 0.08);
+  font-size: 0.9rem;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.confirm-actions button:first-of-type {
+  background: #0f172a;
+  color: #e5e7eb;
+}
+
+.confirm-actions button:last-of-type {
+  background: #dc2626;
+  color: #f9fafb;
+}
+
 .card {
   background: rgba(2, 6, 23, 0.96);
   border-radius: 0.9rem;

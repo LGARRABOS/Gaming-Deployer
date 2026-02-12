@@ -25,6 +25,7 @@ export const DeploymentDetailsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -56,9 +57,6 @@ export const DeploymentDetailsPage: React.FC = () => {
   if (!deployment) return <p className="error">Déploiement introuvable</p>;
 
   const onDelete = async () => {
-    if (!window.confirm("Supprimer ce déploiement et tenter de détruire la VM associée ?")) {
-      return;
-    }
     setDeleting(true);
     setDeleteError(null);
     try {
@@ -81,9 +79,29 @@ export const DeploymentDetailsPage: React.FC = () => {
       <p>IP: {deployment.ip_address ?? "-"}</p>
       {deployment.error_message && <p className="error">{deployment.error_message}</p>}
 
-      <button onClick={onDelete} disabled={deleting}>
-        {deleting ? "Suppression en cours..." : "Annuler / supprimer ce déploiement"}
-      </button>
+      {!confirmingDelete && (
+        <button onClick={() => setConfirmingDelete(true)} disabled={deleting}>
+          Annuler / supprimer ce déploiement
+        </button>
+      )}
+
+      {confirmingDelete && (
+        <div className="confirm-delete">
+          <p>
+            Supprimer ce déploiement et tenter de détruire la VM associée ?
+            Cette action est définitive.
+          </p>
+          <div className="confirm-actions">
+            <button type="button" onClick={() => setConfirmingDelete(false)} disabled={deleting}>
+              Annuler
+            </button>
+            <button type="button" onClick={onDelete} disabled={deleting}>
+              {deleting ? "Suppression..." : "Confirmer la suppression"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {deleteError && <p className="error">{deleteError}</p>}
 
       <h2>Logs</h2>
