@@ -56,6 +56,20 @@ export const DeploymentDetailsPage: React.FC = () => {
   if (error) return <p className="error">{error}</p>;
   if (!deployment) return <p className="error">Déploiement introuvable</p>;
 
+  let sftpUser: string | null = null;
+  let sftpPassword: string | null = null;
+  try {
+    if (deployment.result_json) {
+      const parsed = JSON.parse(deployment.result_json);
+      if (parsed && typeof parsed === "object") {
+        if (parsed.sftp_user) sftpUser = String(parsed.sftp_user);
+        if (parsed.sftp_password) sftpPassword = String(parsed.sftp_password);
+      }
+    }
+  } catch {
+    // ignore JSON parse errors, just don't show SFTP section
+  }
+
   const onDelete = async () => {
     setDeleting(true);
     setDeleteError(null);
@@ -78,6 +92,28 @@ export const DeploymentDetailsPage: React.FC = () => {
       <p>VMID: {deployment.vmid ?? "-"}</p>
       <p>IP: {deployment.ip_address ?? "-"}</p>
       {deployment.error_message && <p className="error">{deployment.error_message}</p>}
+
+      {deployment.ip_address && sftpUser && sftpPassword && (
+        <>
+          <h2>Accès SFTP à la VM</h2>
+          <p className="hint">
+            Utilise ces informations avec un client SFTP (par ex. WinSCP) pour
+            administrer les fichiers du serveur Minecraft.
+          </p>
+          <p>
+            Hôte: <code>{deployment.ip_address}</code>
+          </p>
+          <p>
+            Port: <code>22</code>
+          </p>
+          <p>
+            Utilisateur: <code>{sftpUser}</code>
+          </p>
+          <p>
+            Mot de passe: <code>{sftpPassword}</code>
+          </p>
+        </>
+      )}
 
       {!confirmingDelete && (
         <button onClick={() => setConfirmingDelete(true)} disabled={deleting}>

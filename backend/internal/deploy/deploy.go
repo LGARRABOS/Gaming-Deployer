@@ -2,9 +2,11 @@ package deploy
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net"
 	"os"
 	"os/exec"
@@ -204,6 +206,14 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 		}
 	}
 
+	// Génère un utilisateur/admin SFTP dédié pour ce serveur si non défini.
+	if req.Minecraft.AdminUser == "" {
+		req.Minecraft.AdminUser = "mcadmin"
+	}
+	if req.Minecraft.AdminPassword == "" {
+		req.Minecraft.AdminPassword = generatePassword(20)
+	}
+
 	c, err := proxmox.NewClient(cfg.APIURL, cfg.APITokenID, cfg.APITokenSecret)
 	if err != nil {
 		return err
@@ -304,6 +314,9 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 		"ip":   ip,
 		"job":  j.ID,
 		"run":  uuid.NewString(),
+		// Informations SFTP/admin pour gestion via WinSCP ou équivalent.
+		"sftp_user":     req.Minecraft.AdminUser,
+		"sftp_password": req.Minecraft.AdminPassword,
 	}
 	rawResult, _ := json.Marshal(result)
 	resStr := string(rawResult)
@@ -353,6 +366,25 @@ func runAnsibleMinecraft(ctx context.Context, req MinecraftDeploymentRequest, ho
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// generatePassword crée un mot de passe aléatoire simple (a-zA-Z0-9).
+func generatePassword(length int) string {
+	const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	if length <= 0 {
+		length = 16
+	}
+	var b strings.Builder
+	for i := 0; i < length; i++ {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(alphabet))))
+		if err != nil {
+			// Fallback très improbable en cas d'erreur RNG.
+			b.WriteByte('x')
+			continue
+		}
+		b.WriteByte(alphabet[n.Int64()])
+	}
+	return b.String()
 }
 
 // autoNetwork allocates a fixed IP and related settings from an internal pool.

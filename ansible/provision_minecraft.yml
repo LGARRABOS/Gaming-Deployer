@@ -8,6 +8,11 @@
     mc_service_name: minecraft
 
   tasks:
+    - name: Ensure minecraft group exists
+      group:
+        name: "{{ mc_user }}"
+        state: present
+
     - name: Ensure APT cache is updated
       apt:
         update_cache: true
@@ -24,6 +29,7 @@
         name: "{{ mc_user }}"
         shell: /bin/bash
         create_home: true
+        group: "{{ mc_user }}"
 
     - name: Create minecraft directory
       file:
@@ -32,6 +38,18 @@
         owner: "{{ mc_user }}"
         group: "{{ mc_user }}"
         mode: "0755"
+
+    - name: Create SFTP admin user for Minecraft
+      when:
+        - mc_admin_user is defined
+        - mc_admin_password is defined
+      user:
+        name: "{{ mc_admin_user }}"
+        shell: /bin/bash
+        create_home: true
+        groups: "{{ mc_user }}"
+        append: true
+        password: "{{ mc_admin_password | password_hash('sha512') }}"
 
     - name: Download Minecraft server jar (simplified)
       get_url:
