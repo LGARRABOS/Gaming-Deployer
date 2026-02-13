@@ -391,3 +391,363 @@ input[type="checkbox"] {
   align-self: flex-start;
 }
 
+/* ----- Serveurs Minecraft ----- */
+.servers-page {
+  max-width: 100%;
+}
+
+.servers-loading {
+  text-align: center;
+  padding: 2rem;
+  color: #94a3b8;
+}
+
+.servers-header {
+  margin-bottom: 1.5rem;
+}
+
+.servers-header h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.servers-subtitle {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #94a3b8;
+}
+
+.servers-empty {
+  text-align: center;
+  padding: 3rem 2rem;
+}
+
+.servers-empty-icon {
+  font-size: 3rem;
+  margin-bottom: 0.75rem;
+  opacity: 0.8;
+}
+
+.servers-empty h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+}
+
+.servers-empty p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.95rem;
+}
+
+.servers-empty a {
+  color: #38bdf8;
+}
+
+.servers-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.server-card-wrapper {
+  margin: 0;
+}
+
+.server-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1.25rem 1.25rem;
+  background: rgba(2, 6, 23, 0.96);
+  border: 1px solid #1e293b;
+  border-radius: 0.75rem;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.server-card:hover {
+  border-color: #334155;
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.server-card-name {
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.server-card-meta {
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.server-card-date {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-top: 0.25rem;
+}
+
+.server-card-cta {
+  margin-top: auto;
+  padding-top: 0.75rem;
+  font-size: 0.85rem;
+  color: #38bdf8;
+}
+
+.server-card:hover .server-card-cta {
+  text-decoration: underline;
+}
+
+/* Dashboard serveur */
+.servers-dashboard {
+  padding-bottom: 2rem;
+}
+
+.servers-breadcrumb {
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+  color: #94a3b8;
+}
+
+.servers-breadcrumb a {
+  color: #38bdf8;
+}
+
+.servers-breadcrumb-sep {
+  margin: 0 0.35rem;
+  color: #475569;
+}
+
+.servers-dashboard-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.servers-dashboard-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.servers-dashboard-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.server-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.server-status-badge--on {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+}
+
+.server-status-badge--off {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+  border: 1px solid #334155;
+}
+
+.servers-link-secondary {
+  font-size: 0.9rem;
+  color: #94a3b8;
+}
+
+.servers-link-secondary:hover {
+  color: #38bdf8;
+}
+
+.servers-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.25rem;
+}
+
+.server-panel {
+  padding: 1.25rem 1.5rem;
+}
+
+.server-panel--wide {
+  grid-column: 1 / -1;
+}
+
+.server-panel-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.server-panel-desc {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.server-panel-desc code {
+  font-size: 0.8rem;
+  padding: 0.1rem 0.35rem;
+  background: #0f172a;
+  border-radius: 0.25rem;
+}
+
+.server-panel-error {
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.server-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.server-actions .server-btn {
+  margin: 0;
+}
+
+.server-btn {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.2s, background 0.2s;
+}
+
+.server-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.server-btn--start {
+  background: #22c55e;
+  color: #0f172a;
+}
+
+.server-btn--start:hover:not(:disabled) {
+  background: #16a34a;
+}
+
+.server-btn--stop {
+  background: #1e293b;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+}
+
+.server-btn--stop:hover:not(:disabled) {
+  background: #334155;
+}
+
+.server-btn--restart {
+  background: #0ea5e9;
+  color: #0f172a;
+}
+
+.server-btn--restart:hover:not(:disabled) {
+  background: #0284c7;
+}
+
+.server-btn--primary {
+  background: #0ea5e9;
+  color: #0f172a;
+}
+
+.server-btn--primary:hover:not(:disabled) {
+  background: #0284c7;
+}
+
+/* SFTP dans le panel */
+.sftp-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.sftp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sftp-field-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.sftp-field-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.sftp-field-row code {
+  flex: 1;
+  min-width: 0;
+  padding: 0.4rem 0.6rem;
+  background: #0f172a;
+  border-radius: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.sftp-field-row .btn-copy {
+  flex-shrink: 0;
+}
+
+/* Config form */
+.server-config-form {
+  margin-top: 0.5rem;
+}
+
+.server-config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.server-config-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.server-config-grid label span {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.server-config-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.server-config-actions .success,
+.server-config-actions .error {
+  font-size: 0.9rem;
+}
+

@@ -32,44 +32,57 @@ export const ServersListPage: React.FC = () => {
     return () => { cancelled = true; };
   }, []);
 
-  if (loading) return <p>Chargement...</p>;
-  if (error) return <p className="error">{error}</p>;
+  if (loading) {
+    return (
+      <div className="card servers-page">
+        <div className="servers-loading">Chargement des serveurs…</div>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="card servers-page">
+        <p className="error">{error}</p>
+      </div>
+    );
+  }
 
   const list = servers ?? [];
 
   return (
-    <div className="card">
-      <h1>Serveurs Minecraft</h1>
-      <p className="hint">
-        Gestion des serveurs déployés : démarrage, arrêt, configuration et accès SFTP.
-      </p>
+    <div className="servers-page">
+      <header className="servers-header">
+        <h1>Serveurs Minecraft</h1>
+        <p className="servers-subtitle">
+          Gestion des serveurs déployés : démarrage, arrêt, configuration et accès SFTP.
+        </p>
+      </header>
+
       {list.length === 0 ? (
-        <p>Aucun serveur Minecraft déployé. Créez-en un depuis Déploiements.</p>
+        <div className="card servers-empty">
+          <div className="servers-empty-icon">🖥️</div>
+          <h2>Aucun serveur</h2>
+          <p>Créez un serveur Minecraft depuis la page <Link to="/deployments/new/minecraft">Nouveau déploiement</Link>.</p>
+        </div>
       ) : (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Nom</th>
-              <th>Port</th>
-              <th>Créé le</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((s) => (
-              <tr key={s.id}>
-                <td>{s.name}</td>
-                <td>{s.port}</td>
-                <td>{new Date(s.created_at).toLocaleString()}</td>
-                <td>
-                  <Link to={`/servers/${s.id}`} className="sidebar-link">
-                    Tableau de bord
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <ul className="servers-grid">
+          {list.map((s) => (
+            <li key={s.id} className="server-card-wrapper">
+              <Link to={`/servers/${s.id}`} className="server-card">
+                <span className="server-card-name">{s.name}</span>
+                <span className="server-card-meta">Port {s.port}</span>
+                <span className="server-card-date">
+                  {new Date(s.created_at).toLocaleDateString("fr-FR", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </span>
+                <span className="server-card-cta">Ouvrir le tableau de bord →</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

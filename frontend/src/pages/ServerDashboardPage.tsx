@@ -128,190 +128,193 @@ export const ServerDashboardPage: React.FC = () => {
   };
 
   if (!serverId) return <p className="error">ID invalide</p>;
-  if (loading) return <p>Chargement...</p>;
-  if (error && !server) return <p className="error">{error}</p>;
-  if (!server) return <p className="error">Serveur introuvable</p>;
+  if (loading) return <div className="card servers-page"><div className="servers-loading">Chargement…</div></div>;
+  if (error && !server) return <div className="card"><p className="error">{error}</p></div>;
+  if (!server) return <div className="card"><p className="error">Serveur introuvable</p></div>;
 
   const sftpBlock =
     server.sftp_user && server.sftp_password
       ? `Hôte: ${server.ip}\nPort: 22\nUtilisateur: ${server.sftp_user}\nMot de passe: ${server.sftp_password}`
       : "";
 
+  const statusLabel =
+    serviceStatus === "active" ? "En marche" :
+    serviceStatus === "inactive" ? "Arrêté" : String(serviceStatus);
+
   return (
-    <div className="card">
-      <h1>{server.name}</h1>
+    <div className="servers-page servers-dashboard">
+      <nav className="servers-breadcrumb">
+        <Link to="/servers">Serveurs Minecraft</Link>
+        <span className="servers-breadcrumb-sep">/</span>
+        <span>{server.name}</span>
+      </nav>
+
+      <header className="servers-dashboard-header">
+        <h1>{server.name}</h1>
+        <div className="servers-dashboard-header-actions">
+          <span
+            className={`server-status-badge server-status-badge--${serviceStatus === "active" ? "on" : "off"}`}
+            aria-label={`Statut : ${statusLabel}`}
+          >
+            {statusLabel}
+          </span>
+          <Link to={`/deployments/${serverId}`} className="servers-link-secondary">
+            Voir les logs du déploiement
+          </Link>
+        </div>
+      </header>
+
       {copyFeedback && (
         <p className="copy-feedback success" role="status">{copyFeedback}</p>
       )}
-      <p>
-        <Link to={`/deployments/${serverId}`} className="hint">
-          Voir les logs du déploiement
-        </Link>
-      </p>
 
-      {/* Contrôle du service */}
-      <section className="server-section">
-        <h2>Contrôle du serveur</h2>
-        <p className="hint">
-          Statut du service Minecraft :{" "}
-          <strong className={serviceStatus === "active" ? "success" : ""}>
-            {serviceStatus === "active" ? "En marche" : serviceStatus === "inactive" ? "Arrêté" : serviceStatus}
-          </strong>
-        </p>
-        <div className="server-actions">
-          <button
-            type="button"
-            onClick={() => onAction("start")}
-            disabled={actionLoading !== null || serviceStatus === "active"}
-          >
-            {actionLoading === "start" ? "..." : "Démarrer"}
-          </button>
-          <button
-            type="button"
-            onClick={() => onAction("stop")}
-            disabled={actionLoading !== null || serviceStatus !== "active"}
-          >
-            {actionLoading === "stop" ? "..." : "Arrêter"}
-          </button>
-          <button
-            type="button"
-            onClick={() => onAction("restart")}
-            disabled={actionLoading !== null}
-          >
-            {actionLoading === "restart" ? "..." : "Redémarrer"}
-          </button>
-        </div>
-        {error && <p className="error">{error}</p>}
-      </section>
-
-      {/* Accès SFTP */}
-      {server.sftp_user && server.sftp_password && (
-        <section className="server-section">
-          <h2>Accès SFTP (WinSCP, FileZilla…)</h2>
-          <p className="hint">
-            Utilise ces identifiants pour accéder aux fichiers du serveur (dossier{" "}
-            <code>minecraft</code> dans ton accès SFTP).
+      <div className="servers-dashboard-grid">
+        {/* Contrôle du service */}
+        <section className="card server-panel">
+          <h2 className="server-panel-title">Contrôle du serveur</h2>
+          <p className="server-panel-desc">
+            Démarrer, arrêter ou redémarrer le service Minecraft sur la VM.
           </p>
-          <div className="sftp-info">
-            <div className="info-row">
-              <span className="info-label">Hôte</span>
-              <code className="info-value">{server.ip}</code>
-              <button
-                type="button"
-                className="btn-copy"
-                onClick={() => copyToClipboard(server.ip, "Hôte copié")}
-              >
-                Copier
-              </button>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Port</span>
-              <code className="info-value">22</code>
-              <button
-                type="button"
-                className="btn-copy"
-                onClick={() => copyToClipboard("22", "Port copié")}
-              >
-                Copier
-              </button>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Utilisateur</span>
-              <code className="info-value">{server.sftp_user}</code>
-              <button
-                type="button"
-                className="btn-copy"
-                onClick={() => copyToClipboard(server.sftp_user!, "Utilisateur copié")}
-              >
-                Copier
-              </button>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Mot de passe</span>
-              <code className="info-value">{server.sftp_password}</code>
-              <button
-                type="button"
-                className="btn-copy"
-                onClick={() => copyToClipboard(server.sftp_password!, "Mot de passe copié")}
-              >
-                Copier
-              </button>
-            </div>
+          <div className="server-actions">
+            <button
+              type="button"
+              className="server-btn server-btn--start"
+              onClick={() => onAction("start")}
+              disabled={actionLoading !== null || serviceStatus === "active"}
+            >
+              {actionLoading === "start" ? "…" : "Démarrer"}
+            </button>
+            <button
+              type="button"
+              className="server-btn server-btn--stop"
+              onClick={() => onAction("stop")}
+              disabled={actionLoading !== null || serviceStatus !== "active"}
+            >
+              {actionLoading === "stop" ? "…" : "Arrêter"}
+            </button>
+            <button
+              type="button"
+              className="server-btn server-btn--restart"
+              onClick={() => onAction("restart")}
+              disabled={actionLoading !== null}
+            >
+              {actionLoading === "restart" ? "…" : "Redémarrer"}
+            </button>
           </div>
-          <p className="hint">
-            L’Copier chaque champ ou tout en un clic ci-dessous
-            pour te connecter en SFTP.
-          </p>
-          <p>
+          {error && <p className="error server-panel-error">{error}</p>}
+        </section>
+
+        {/* Accès SFTP */}
+        {server.sftp_user && server.sftp_password && (
+          <section className="card server-panel">
+            <h2 className="server-panel-title">Accès SFTP</h2>
+            <p className="server-panel-desc">
+              Utilise ces identifiants dans WinSCP, FileZilla, etc. Le dossier <code>minecraft</code> contient les fichiers du serveur.
+            </p>
+            <div className="sftp-fields">
+              <div className="sftp-field">
+                <span className="sftp-field-label">Hôte</span>
+                <div className="sftp-field-row">
+                  <code>{server.ip}</code>
+                  <button type="button" className="btn-copy" onClick={() => copyToClipboard(server.ip, "Hôte copié")}>Copier</button>
+                </div>
+              </div>
+              <div className="sftp-field">
+                <span className="sftp-field-label">Port</span>
+                <div className="sftp-field-row">
+                  <code>22</code>
+                  <button type="button" className="btn-copy" onClick={() => copyToClipboard("22", "Port copié")}>Copier</button>
+                </div>
+              </div>
+              <div className="sftp-field">
+                <span className="sftp-field-label">Utilisateur</span>
+                <div className="sftp-field-row">
+                  <code>{server.sftp_user}</code>
+                  <button type="button" className="btn-copy" onClick={() => copyToClipboard(server.sftp_user!, "Utilisateur copié")}>Copier</button>
+                </div>
+              </div>
+              <div className="sftp-field">
+                <span className="sftp-field-label">Mot de passe</span>
+                <div className="sftp-field-row">
+                  <code>{server.sftp_password}</code>
+                  <button type="button" className="btn-copy" onClick={() => copyToClipboard(server.sftp_password!, "Mot de passe copié")}>Copier</button>
+                </div>
+              </div>
+            </div>
             <button
               type="button"
               className="btn-copy-all"
               onClick={() => copyToClipboard(sftpBlock, "Infos SFTP copiées")}
             >
-              Copier toutes les infos d'accès SFTP
+              Copier toutes les infos d’accès SFTP
             </button>
-          </p>
-        </section>
-      )}
+          </section>
+        )}
 
-      {/* Configuration server.properties */}
-      <section className="server-section">
-        <h2>Configuration (server.properties)</h2>
-        <form onSubmit={onSaveConfig} className="form-grid">
-          <label>
-            MOTD
-            <input
-              value={configProps["motd"] ?? ""}
-              onChange={(e) => setConfigProps((p) => ({ ...p, motd: e.target.value }))}
-            />
-          </label>
-          <label>
-            Nombre max de joueurs
-            <input
-              type="number"
-              value={configProps["max-players"] ?? ""}
-              onChange={(e) =>
-                setConfigProps((p) => ({ ...p, "max-players": e.target.value }))
-              }
-            />
-          </label>
-          <label>
-            Mode en ligne (true/false)
-            <input
-              value={configProps["online-mode"] ?? ""}
-              onChange={(e) =>
-                setConfigProps((p) => ({ ...p, "online-mode": e.target.value }))
-              }
-            />
-          </label>
-          <label>
-            PVP (true/false)
-            <input
-              value={configProps["pvp"] ?? ""}
-              onChange={(e) => setConfigProps((p) => ({ ...p, pvp: e.target.value }))}
-            />
-          </label>
-          <label>
-            Difficulté (peaceful, easy, normal, hard)
-            <input
-              value={configProps["difficulty"] ?? ""}
-              onChange={(e) =>
-                setConfigProps((p) => ({ ...p, difficulty: e.target.value }))
-              }
-            />
-          </label>
-          <div style={{ gridColumn: "1 / -1" }}>
-            <button type="submit" disabled={configSaving}>
-              {configSaving ? "Enregistrement..." : "Enregistrer la configuration"}
-            </button>
-            {configMessage && (
-              <span className={configMessage.startsWith("Configuration") ? "success" : "error"}>
-                {" "}{configMessage}
-              </span>
-            )}
-          </div>
-        </form>
-      </section>
+        {/* Configuration server.properties */}
+        <section className="card server-panel server-panel--wide">
+          <h2 className="server-panel-title">Configuration (server.properties)</h2>
+          <form onSubmit={onSaveConfig} className="server-config-form">
+            <div className="server-config-grid">
+              <label>
+                <span>MOTD</span>
+                <input
+                  value={configProps["motd"] ?? ""}
+                  onChange={(e) => setConfigProps((p) => ({ ...p, motd: e.target.value }))}
+                />
+              </label>
+              <label>
+                <span>Nombre max de joueurs</span>
+                <input
+                  type="number"
+                  value={configProps["max-players"] ?? ""}
+                  onChange={(e) =>
+                    setConfigProps((p) => ({ ...p, "max-players": e.target.value }))
+                  }
+                />
+              </label>
+              <label>
+                <span>Mode en ligne</span>
+                <input
+                  value={configProps["online-mode"] ?? ""}
+                  onChange={(e) =>
+                    setConfigProps((p) => ({ ...p, "online-mode": e.target.value }))
+                  }
+                  placeholder="true / false"
+                />
+              </label>
+              <label>
+                <span>PVP</span>
+                <input
+                  value={configProps["pvp"] ?? ""}
+                  onChange={(e) => setConfigProps((p) => ({ ...p, pvp: e.target.value }))}
+                  placeholder="true / false"
+                />
+              </label>
+              <label>
+                <span>Difficulté</span>
+                <input
+                  value={configProps["difficulty"] ?? ""}
+                  onChange={(e) =>
+                    setConfigProps((p) => ({ ...p, difficulty: e.target.value }))
+                  }
+                  placeholder="peaceful, easy, normal, hard"
+                />
+              </label>
+            </div>
+            <div className="server-config-actions">
+              <button type="submit" className="server-btn server-btn--primary" disabled={configSaving}>
+                {configSaving ? "Enregistrement…" : "Enregistrer"}
+              </button>
+              {configMessage && (
+                <span className={configMessage.startsWith("Configuration") ? "success" : "error"}>
+                  {configMessage}
+                </span>
+              )}
+            </div>
+          </form>
+        </section>
+      </div>
     </div>
   );
 };

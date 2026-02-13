@@ -114,12 +114,17 @@
             AllowTcpForwarding no
       notify: Restart sshd
 
-    - name: Download Minecraft server jar (simplified)
+    - name: Download Minecraft server jar (vanilla; paper/purpur use vanilla jar for now)
       get_url:
         url: "https://launcher.mojang.com/v1/objects/fe3d4f8fcf4c4444974e68bbb78a1732ad4d0f90/server.jar"
         dest: "{{ mc_dir }}/server.jar"
         mode: "0644"
-      when: mc_type == "vanilla"
+
+    - name: Set ownership of server jar
+      file:
+        path: "{{ mc_dir }}/server.jar"
+        owner: "{{ mc_user }}"
+        group: "{{ mc_user }}"
 
     - name: Accept EULA
       copy:
