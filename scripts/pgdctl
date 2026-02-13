@@ -79,9 +79,21 @@ case "$cmd" in
       exit 1
     }
     echo "    Service restarted successfully."
-    # Refresh pgdctl in PATH so next run uses this script (including no-update check)
-    if [[ -f "$REPO_DIR/scripts/pgdctl" && -w /usr/local/bin ]]; then
-      cp -f "$REPO_DIR/scripts/pgdctl" /usr/local/bin/pgdctl 2>/dev/null && echo "    pgdctl command updated in /usr/local/bin."
+    # Refresh pgdctl in PATH so "sudo pgdctl update" uses this script (including no-update check)
+    SRC="$REPO_DIR/scripts/pgdctl"
+    DST="$(command -v pgdctl 2>/dev/null)" || DST="/usr/local/bin/pgdctl"
+    if [[ -f "$SRC" && -n "$DST" && "$SRC" != "$DST" ]]; then
+      if cp -f "$SRC" "$DST" 2>/dev/null; then
+        echo "    pgdctl command updated at $DST"
+      else
+        echo "    !! Could not update pgdctl at $DST (run: sudo cp $SRC $DST)"
+      fi
+    elif [[ -f "$SRC" && -w /usr/local/bin ]]; then
+      if cp -f "$SRC" /usr/local/bin/pgdctl 2>/dev/null; then
+        echo "    pgdctl command updated at /usr/local/bin/pgdctl"
+      else
+        echo "    !! Could not update pgdctl (run: sudo cp $SRC /usr/local/bin/pgdctl)"
+      fi
     fi
     echo ""
     echo "==> Update completed successfully."
