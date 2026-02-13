@@ -804,6 +804,14 @@ input[type="checkbox"] {
   font-weight: 500;
 }
 
+.server-console-line--info {
+  color: #e2e8f0;
+}
+
+.server-console-line--warn {
+  color: #facc15;
+}
+
 .server-console-placeholder {
   color: #64748b;
   font-style: italic;

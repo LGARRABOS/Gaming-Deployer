@@ -24,6 +24,7 @@ export const ServerConsole: React.FC<Props> = ({ serverId }) => {
   const [sending, setSending] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const connect = useCallback(() => {
     if (eventSourceRef.current) return;
@@ -37,6 +38,8 @@ export const ServerConsole: React.FC<Props> = ({ serverId }) => {
 
     es.onmessage = (e: MessageEvent) => {
       const line = typeof e.data === "string" ? e.data : String(e.data);
+      // Ignore noisy RCON client connect/disconnect logs
+      if (line.includes("Thread RCON Client")) return;
       setLines((prev) => [...prev.slice(-999), { text: line }]);
     };
 
@@ -69,6 +72,11 @@ export const ServerConsole: React.FC<Props> = ({ serverId }) => {
     el.scrollTop = el.scrollHeight;
   }, [lines]);
 
+  // Auto-focus input when console mounts
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
   const sendCommand = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -84,6 +92,9 @@ export const ServerConsole: React.FC<Props> = ({ serverId }) => {
         if (!res.ok) {
           const msg = res.error || "Erreur lors de l'envoi de la commande.";
           setLines((prev) => [...prev.slice(-999), { text: msg, error: true }]);
+        } else if (typeof res.response === "string" && res.response.trim() !== "") {
+          const respText = res.response.trim();
+          setLines((prev) => [...prev.slice(-999), { text: respText }]);
         }
         setCommand("");
       } catch (err) {
@@ -120,14 +131,23 @@ export const ServerConsole: React.FC<Props> = ({ serverId }) => {
         {lines.length === 0 && status !== "connected" && (
           <span className="server-console-placeholder">Connexion en cours…</span>
         )}
-        {lines.map((line, i) => (
-          <div
-            key={i}
-            className={`server-console-line ${line.error ? "server-console-line--error" : ""}`}
-          >
-            {line.text || "\u00A0"}
-          </div>
-        ))}
+        {lines.map((line, i) => {
+          let cls = "server-console-line";
+          if (line.error) {
+            cls += " server-console-line--error";
+          } else if (line.text.includes("[Server thread/INFO]") || line.text.includes("/INFO]:")) {
+            cls += " server-console-line--info";
+          } else if (line.text.includes("/WARN]") || line.text.includes("/WARNING]")) {
+            cls += " server-console-line--warn";
+          } else if (line.text.includes("/ERROR]") || line.text.includes("[Server thread/ERROR]")) {
+            cls += " server-console-line--error";
+          }
+          return (
+            <div key={i} className={cls}>
+              {line.text || "\u00A0"}
+            </div>
+          );
+        })}
       </div>
       <form className="server-console-input-row" onSubmit={sendCommand}>
         <input
@@ -137,6 +157,7 @@ export const ServerConsole: React.FC<Props> = ({ serverId }) => {
           value={command}
           onChange={(e) => setCommand(e.target.value)}
           disabled={sending}
+          ref={inputRef}
         />
         <button
           type="submit"
