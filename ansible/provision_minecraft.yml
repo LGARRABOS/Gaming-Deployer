@@ -114,9 +114,11 @@
             AllowTcpForwarding no
       notify: Restart sshd
 
+    # Mojang moved server jars to piston-data.mojang.com (launcher.mojang.com returns 404).
+    # URL below is vanilla 1.21.11 from https://piston-meta.mojang.com/mc/game/version_manifest_v2.json
     - name: Download Minecraft server jar (vanilla; paper/purpur use vanilla jar for now)
       get_url:
-        url: "https://launcher.mojang.com/v1/objects/fe3d4f8fcf4c4444974e68bbb78a1732ad4d0f90/server.jar"
+        url: "https://piston-data.mojang.com/v1/objects/64bb6d763bed0a9f1d632ec347938594144943ed/server.jar"
         dest: "{{ mc_dir }}/server.jar"
         mode: "0644"
 
