@@ -36,6 +36,7 @@ export const DeploymentDetailsPage: React.FC = () => {
   const [specs, setSpecs] = useState<{ cores: number; memory_mb: number; disk_gb: number } | null>(null);
   const [specsSaving, setSpecsSaving] = useState(false);
   const [specsMessage, setSpecsMessage] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"logs" | "ressources">("logs");
   const navigate = useNavigate();
 
   const fetchSpecs = useCallback(async () => {
@@ -156,67 +157,90 @@ export const DeploymentDetailsPage: React.FC = () => {
         </div>
       )}
 
-      {deployment.status === "success" && (
-        <section className="card page-panel">
-          <h2 className="page-panel-title">Ressources VM (Specs)</h2>
-          <p className="page-panel-desc">
-            Modifier le CPU, la RAM et le disque de la VM. Les changements sont appliqués sur Proxmox. Proxmox ne permet pas de réduire la taille du disque (agrandissement uniquement).
-          </p>
-          {specs && (
-            <form onSubmit={onSaveSpecs} className="server-config-form">
-              <div className="server-config-grid">
-                <label>
-                  <span>CPU (cores)</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={32}
-                    value={specs.cores}
-                    onChange={(e) => setSpecs((s) => s ? { ...s, cores: Number(e.target.value) } : s)}
-                  />
-                </label>
-                <label>
-                  <span>RAM (Mo)</span>
-                  <input
-                    type="number"
-                    min={1024}
-                    step={1024}
-                    value={specs.memory_mb}
-                    onChange={(e) => setSpecs((s) => s ? { ...s, memory_mb: Number(e.target.value) } : s)}
-                  />
-                </label>
-                <label>
-                  <span>Disque (Go)</span>
-                  <input
-                    type="number"
-                    min={10}
-                    max={500}
-                    value={specs.disk_gb}
-                    onChange={(e) => setSpecs((s) => s ? { ...s, disk_gb: Number(e.target.value) } : s)}
-                    title="Agrandissement uniquement (Proxmox ne supporte pas la réduction)"
-                  />
-                </label>
-              </div>
-              <div className="server-config-actions">
-                <button type="submit" className="server-btn server-btn--primary" disabled={specsSaving}>
-                  {specsSaving ? "Enregistrement…" : "Appliquer"}
-                </button>
-                {specsMessage && (
-                  <span className={specsMessage.includes("mises à jour") ? "success" : "error"}>
-                    {specsMessage}
-                  </span>
-                )}
-              </div>
-            </form>
-          )}
-          {!specs && <p className="page-panel-desc">Chargement des specs…</p>}
-        </section>
-      )}
+      <div className="deployment-detail-tabs">
+        <button
+          type="button"
+          className={`deployment-detail-tab ${activeTab === "logs" ? "deployment-detail-tab--active" : ""}`}
+          onClick={() => setActiveTab("logs")}
+        >
+          Logs
+        </button>
+        {deployment.status === "success" && (
+          <button
+            type="button"
+            className={`deployment-detail-tab ${activeTab === "ressources" ? "deployment-detail-tab--active" : ""}`}
+            onClick={() => setActiveTab("ressources")}
+          >
+            Ressources VM
+          </button>
+        )}
+      </div>
 
-      <section className="card page-panel">
-        <h2 className="page-panel-title">Logs du déploiement</h2>
-        <LogsViewer deploymentId={deploymentId} />
-      </section>
+      <div className="deployment-detail-tab-content">
+        {activeTab === "logs" && (
+          <section className="card page-panel">
+            <h2 className="page-panel-title">Logs du déploiement</h2>
+            <LogsViewer deploymentId={deploymentId} />
+          </section>
+        )}
+
+        {activeTab === "ressources" && deployment.status === "success" && (
+          <section className="card page-panel">
+            <h2 className="page-panel-title">Ressources VM</h2>
+            <p className="page-panel-desc">
+              Modifier le CPU, la RAM et le disque de la VM. Les changements sont appliqués sur Proxmox. Proxmox ne permet pas de réduire la taille du disque (agrandissement uniquement).
+            </p>
+            {specs && (
+              <form onSubmit={onSaveSpecs} className="server-config-form">
+                <div className="server-config-grid">
+                  <label>
+                    <span>CPU (cores)</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={32}
+                      value={specs.cores}
+                      onChange={(e) => setSpecs((s) => s ? { ...s, cores: Number(e.target.value) } : s)}
+                    />
+                  </label>
+                  <label>
+                    <span>RAM (Mo)</span>
+                    <input
+                      type="number"
+                      min={1024}
+                      step={1024}
+                      value={specs.memory_mb}
+                      onChange={(e) => setSpecs((s) => s ? { ...s, memory_mb: Number(e.target.value) } : s)}
+                    />
+                  </label>
+                  <label>
+                    <span>Disque (Go)</span>
+                    <input
+                      type="number"
+                      min={10}
+                      max={500}
+                      value={specs.disk_gb}
+                      onChange={(e) => setSpecs((s) => s ? { ...s, disk_gb: Number(e.target.value) } : s)}
+                      title="Agrandissement uniquement (Proxmox ne supporte pas la réduction)"
+                    />
+                  </label>
+                </div>
+                <div className="server-config-actions">
+                  <button type="submit" className="server-btn server-btn--primary" disabled={specsSaving}>
+                    {specsSaving ? "Enregistrement…" : "Appliquer"}
+                  </button>
+                  {specsMessage && (
+                    <span className={specsMessage.includes("mises à jour") ? "success" : "error"}>
+                      {specsMessage}
+                    </span>
+                  )}
+                </div>
+              </form>
+            )}
+            {!specs && <p className="page-panel-desc">Chargement des specs…</p>}
+          </section>
+        )}
+      </div>
 
       <section className="card page-panel page-panel--danger">
         <h2 className="page-panel-title">Supprimer le déploiement</h2>
