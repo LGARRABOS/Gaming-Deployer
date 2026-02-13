@@ -74,6 +74,7 @@ func New(ctx context.Context, dbPath string) (*Server, error) {
 			r.Get("/servers/{id}/config", s.handleGetServerConfig)
 			r.Put("/servers/{id}/config", s.handleUpdateServerConfig)
 			r.Get("/servers/{id}/console", s.handleServerConsole)
+			r.Post("/servers/{id}/console/command", s.handleServerConsoleCommand)
 		})
 	})
 

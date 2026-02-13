@@ -804,6 +804,29 @@ input[type="checkbox"] {
   font-style: italic;
 }
 
+.server-console-input-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.server-console-input {
+  flex: 1;
+  border-radius: 0.5rem;
+  border: 1px solid #1f2937;
+  background: #020617;
+  color: #e2e8f0;
+  padding: 0.45rem 0.75rem;
+  font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+}
+
+.server-console-input:focus {
+  outline: none;
+  border-color: #0ea5e9;
+  box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.35);
+}
+
 /* ----- Pages communes (Déploiements, Paramètres, etc.) ----- */
 .page-wrap {
   max-width: 100%;

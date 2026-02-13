@@ -30,11 +30,11 @@ type ModDescriptor struct {
 
 // Config describes the full configuration for a Minecraft server deployment.
 type Config struct {
-	Edition  Edition        `json:"edition"`
-	Version  string         `json:"version"`
-	Type     ServerType     `json:"type"`
-	Modded   bool           `json:"modded"`
-	Mods     []ModDescriptor `json:"mods,omitempty"`
+	Edition Edition        `json:"edition"`
+	Version string         `json:"version"`
+	Type    ServerType     `json:"type"`
+	Modded  bool           `json:"modded"`
+	Mods    []ModDescriptor `json:"mods,omitempty"`
 
 	Port            int      `json:"port"`
 	ExtraPorts      []int    `json:"extra_ports,omitempty"`
@@ -47,8 +47,14 @@ type Config struct {
 	JVMHeap         string   `json:"jvm_heap"`          // e.g. "2G"
 	JVMFlags        string   `json:"jvm_flags"`         // extra flags
 	BackupEnabled   bool     `json:"backup_enabled"`
-	BackupFrequency string   `json:"backup_frequency"`  // e.g. "daily"
-	BackupRetention int      `json:"backup_retention"`  // number of backups
+	BackupFrequency string   `json:"backup_frequency"` // e.g. "daily"
+	BackupRetention int      `json:"backup_retention"` // number of backups
+
+	// RCON configuration for remote console commands. These fields are populated
+	// server-side; the public API does not need to provide them.
+	RCONEnabled  bool   `json:"rcon_enabled,omitempty"`
+	RCONPort     int    `json:"rcon_port,omitempty"`
+	RCONPassword string `json:"rcon_password,omitempty"`
 
 	// AdminUser/AdminPassword are populated server-side to create an SFTP/admin
 	// user on the VM for managing the Minecraft files. They are not expected
@@ -89,6 +95,9 @@ func (c Config) ToAnsibleVars() map[string]any {
 		"mc_backup_retention": c.BackupRetention,
 		"mc_admin_user":       c.AdminUser,
 		"mc_admin_password":   c.AdminPassword,
+		"mc_rcon_enabled":     c.RCONEnabled,
+		"mc_rcon_port":        c.RCONPort,
+		"mc_rcon_password":    c.RCONPassword,
 	}
 }
 

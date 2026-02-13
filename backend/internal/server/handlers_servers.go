@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os/exec"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/gorcon/rcon"
 
 	"github.com/example/proxmox-game-deployer/internal/config"
 	"github.com/example/proxmox-game-deployer/internal/deploy"
@@ -180,6 +182,54 @@ func (s *Server) handleServerAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "stdout": stdout})
+}
+
+// handleServerConsoleCommand sends a command to the Minecraft server via RCON.
+func (s *Server) handleServerConsoleCommand(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	var body struct {
+		Command string `json:"command"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	cmd := strings.TrimSpace(body.Command)
+	if cmd == "" {
+		http.Error(w, "command is required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	ip, _, err := s.getServerSSHTarget(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	port, password, err := s.getServerRCONConfig(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, "RCON not configured for this server", http.StatusBadRequest)
+		return
+	}
+	addr := fmt.Sprintf("%s:%d", ip, port)
+	client, err := rcon.Dial(addr, password)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	defer client.Close()
+
+	resp, err := client.Execute(cmd)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "response": resp})
 }
 
 // handleServerConsole streams the Minecraft service logs (journalctl -u minecraft -f) as SSE.
@@ -367,6 +417,43 @@ func (s *Server) getServerMinecraftPath(ctx context.Context, deploymentID int64)
 		}
 	}
 	return mcDir, mcUser, nil
+}
+
+// getServerRCONConfig extracts RCON port and password from deployment result_json.
+func (s *Server) getServerRCONConfig(ctx context.Context, deploymentID int64) (port int, password string, err error) {
+	row := s.DB.Sql().QueryRowContext(ctx, `
+		SELECT result_json FROM deployments
+		WHERE id = ? AND game = ? AND status = ?
+	`, deploymentID, "minecraft", string(deploy.StatusSuccess))
+	var resultJSON sql.NullString
+	if err := row.Scan(&resultJSON); err != nil {
+		return 0, "", err
+	}
+	if !resultJSON.Valid || resultJSON.String == "" {
+		return 0, "", fmt.Errorf("result_json is empty")
+	}
+	var res map[string]any
+	if err := json.Unmarshal([]byte(resultJSON.String), &res); err != nil {
+		return 0, "", err
+	}
+	rawPort, okPort := res["rcon_port"]
+	rawPass, okPass := res["rcon_password"]
+	if !okPort || !okPass {
+		return 0, "", fmt.Errorf("rcon not present in result_json")
+	}
+	switch v := rawPort.(type) {
+	case float64:
+		port = int(v)
+	case int:
+		port = v
+	default:
+		return 0, "", fmt.Errorf("invalid rcon_port type")
+	}
+	password, _ = rawPass.(string)
+	if port <= 0 || password == "" {
+		return 0, "", fmt.Errorf("invalid rcon config")
+	}
+	return port, password, nil
 }
 
 func parseServerProperties(raw string) map[string]string {

@@ -206,6 +206,19 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 		}
 	}
 
+	// Ensure RCON is enabled so that the UI can send commands to the Minecraft
+	// console remotely. Each VM has its own IP so we can use the default RCON
+	// port safely.
+	if !req.Minecraft.RCONEnabled {
+		req.Minecraft.RCONEnabled = true
+	}
+	if req.Minecraft.RCONPort == 0 {
+		req.Minecraft.RCONPort = 25575
+	}
+	if strings.TrimSpace(req.Minecraft.RCONPassword) == "" {
+		req.Minecraft.RCONPassword = generatePassword(24)
+	}
+
 	// Génère un utilisateur/admin SFTP dédié pour ce serveur si non défini.
 	if req.Minecraft.AdminUser == "" {
 		req.Minecraft.AdminUser = "mcadmin"
@@ -316,14 +329,16 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 		mcUser = u
 	}
 	result := map[string]any{
-		"vmid": vmid,
-		"ip":   ip,
-		"job":  j.ID,
-		"run":  uuid.NewString(),
-		"mc_dir": mcDir,
-		"mc_user": mcUser,
+		"vmid":          vmid,
+		"ip":            ip,
+		"job":           j.ID,
+		"run":           uuid.NewString(),
+		"mc_dir":        mcDir,
+		"mc_user":       mcUser,
 		"sftp_user":     req.Minecraft.AdminUser,
 		"sftp_password": req.Minecraft.AdminPassword,
+		"rcon_port":     req.Minecraft.RCONPort,
+		"rcon_password": req.Minecraft.RCONPassword,
 	}
 	rawResult, _ := json.Marshal(result)
 	resStr := string(rawResult)

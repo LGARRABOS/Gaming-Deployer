@@ -1,13 +1,22 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { apiPost } from "../api/client";
 
 interface Props {
   serverId: number;
+}
+
+interface CommandResult {
+  ok: boolean;
+  response?: string;
+  error?: string;
 }
 
 export const ServerConsole: React.FC<Props> = ({ serverId }) => {
   const [lines, setLines] = useState<string[]>([]);
   const [status, setStatus] = useState<"idle" | "connecting" | "connected" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [command, setCommand] = useState("");
+  const [sending, setSending] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -45,6 +54,17 @@ export const ServerConsole: React.FC<Props> = ({ serverId }) => {
 
   const clear = useCallback(() => setLines([]), []);
 
+  // Auto-connect to the log stream when the panel is shown
+  useEffect(() => {
+    connect();
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, [connect]);
+
   // Auto-scroll to bottom when new lines arrive
   useEffect(() => {
     const el = containerRef.current;
@@ -52,22 +72,41 @@ export const ServerConsole: React.FC<Props> = ({ serverId }) => {
     el.scrollTop = el.scrollHeight;
   }, [lines]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
+  const sendCommand = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      const trimmed = command.trim();
+      if (!trimmed || sending) return;
+      setSending(true);
+      try {
+        const res = await apiPost<CommandResult, { command: string }>(
+          `/api/servers/${serverId}/console/command`,
+          { command: trimmed }
+        );
+        if (!res.ok) {
+          setErrorMessage(res.error || "Erreur lors de l'envoi de la commande.");
+        } else {
+          setLines((prev) => {
+            const base = [...prev.slice(-999), `> ${trimmed}`];
+            return res.response ? [...base, res.response] : base;
+          });
+        }
+        setCommand("");
+      } catch (err) {
+        setErrorMessage((err as Error).message || "Erreur lors de l'envoi de la commande.");
+      } finally {
+        setSending(false);
       }
-    };
-  }, []);
+    },
+    [command, sending, serverId]
+  );
 
   return (
     <section className="card server-panel server-panel--wide server-console-panel">
       <div className="server-console-header">
         <h2 className="server-panel-title">Console du serveur Minecraft</h2>
         <p className="server-panel-desc">
-          Logs en direct du service <code>minecraft</code> (journalctl). Connecte-toi pour voir les messages en temps réel.
+          Logs en direct du service <code>minecraft</code> (journalctl). La connexion est établie automatiquement à l’ouverture.
         </p>
         <div className="server-console-actions">
           {status !== "connected" && status !== "connecting" && (
@@ -105,6 +144,23 @@ export const ServerConsole: React.FC<Props> = ({ serverId }) => {
           </div>
         ))}
       </div>
+      <form className="server-console-input-row" onSubmit={sendCommand}>
+        <input
+          type="text"
+          className="server-console-input"
+          placeholder="Commande console (ex: say Bonjour, stop, list, ...)"
+          value={command}
+          onChange={(e) => setCommand(e.target.value)}
+          disabled={sending}
+        />
+        <button
+          type="submit"
+          className="server-btn server-btn--primary"
+          disabled={sending || !command.trim()}
+        >
+          {sending ? "Envoi…" : "Envoyer"}
+        </button>
+      </form>
     </section>
   );
 };
