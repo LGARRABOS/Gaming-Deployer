@@ -66,6 +66,13 @@ func New(ctx context.Context, dbPath string) (*Server, error) {
 			r.Get("/deployments/{id}", s.handleGetDeployment)
 			r.Get("/deployments/{id}/logs", s.handleGetDeploymentLogs)
 			r.Delete("/deployments/{id}", s.handleDeleteDeployment)
+			// Serveurs Minecraft (dashboard gestion : start/stop, config, SFTP)
+			r.Get("/servers", s.handleListServers)
+			r.Get("/servers/{id}", s.handleGetServer)
+			r.Post("/servers/{id}/action", s.handleServerAction)
+			r.Get("/servers/{id}/status", s.handleServerStatus)
+			r.Get("/servers/{id}/config", s.handleGetServerConfig)
+			r.Put("/servers/{id}/config", s.handleUpdateServerConfig)
 		})
 	})
 

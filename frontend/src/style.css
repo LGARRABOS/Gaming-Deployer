@@ -305,6 +305,35 @@ textarea {
   border-top: 1px dashed #1f2937;
 }
 
+.server-section {
+  margin-top: 1.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #1e293b;
+}
+
+.server-section h2 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+.server-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.server-actions button {
+  margin-top: 0;
+}
+
+.sftp-info {
+  margin-top: 0.5rem;
+}
+
+.sftp-info p {
+  margin: 0.25rem 0;
+}
+
 input[type="checkbox"] {
   width: auto;
   align-self: flex-start;

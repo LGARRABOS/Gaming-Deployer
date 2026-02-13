@@ -51,6 +51,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               Déploiements
             </Link>
             <Link
+              to="/servers"
+              className={isActive("/servers") ? "sidebar-link sidebar-link--active" : "sidebar-link"}
+            >
+              Serveurs Minecraft
+            </Link>
+            <Link
               to="/deployments/new/minecraft"
               className={isActive("/deployments/new/minecraft") ? "sidebar-link sidebar-link--active" : "sidebar-link"}
             >
@@ -74,6 +80,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 ? "Créer un serveur Minecraft"
                 : location.pathname.startsWith("/deployments/") && location.pathname !== "/deployments"
                 ? "Détail d’un déploiement"
+                : location.pathname.startsWith("/servers/") && location.pathname !== "/servers"
+                ? "Tableau de bord serveur"
+                : location.pathname === "/servers"
+                ? "Serveurs Minecraft"
                 : "Déploiements"}
             </span>
           </header>

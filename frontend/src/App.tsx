@@ -6,6 +6,8 @@ import { LoginPage } from "./pages/LoginPage";
 import { CreateMinecraftServerPage } from "./pages/CreateMinecraftServerPage";
 import { DeploymentsListPage } from "./pages/DeploymentsListPage";
 import { DeploymentDetailsPage } from "./pages/DeploymentDetailsPage";
+import { ServersListPage } from "./pages/ServersListPage";
+import { ServerDashboardPage } from "./pages/ServerDashboardPage";
 import { useAppStatus } from "./hooks/useAppStatus";
 import { SettingsPage } from "./pages/SettingsPage";
 
@@ -73,6 +75,22 @@ const AppRoutes: React.FC = () => {
         element={
           <Layout>
             <DeploymentsListPage />
+          </Layout>
+        }
+      />
+      <Route
+        path="/servers/:id"
+        element={
+          <Layout>
+            <ServerDashboardPage />
+          </Layout>
+        }
+      />
+      <Route
+        path="/servers"
+        element={
+          <Layout>
+            <ServersListPage />
           </Layout>
         }
       />
