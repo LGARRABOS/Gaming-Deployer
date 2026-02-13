@@ -144,6 +144,19 @@ func (c *Client) ConfigureVM(ctx context.Context, node string, vmid int, cores, 
 	return c.do(ctx, http.MethodPost, path, q, nil)
 }
 
+// UpdateVMConfig updates CPU and memory of an existing VM (partial config update).
+func (c *Client) UpdateVMConfig(ctx context.Context, node string, vmid, cores, memoryMB int) error {
+	path := fmt.Sprintf("/nodes/%s/qemu/%d/config", node, vmid)
+	q := url.Values{}
+	if cores > 0 {
+		q.Set("cores", fmt.Sprintf("%d", cores))
+	}
+	if memoryMB > 0 {
+		q.Set("memory", fmt.Sprintf("%d", memoryMB))
+	}
+	return c.do(ctx, http.MethodPost, path, q, nil)
+}
+
 // ResizeDisk adjusts the size of a VM disk using the Proxmox resize endpoint.
 // For simplicity we resize scsi0 to an absolute size in gigabytes, similar to:
 //   qm resize <vmid> scsi0 100G

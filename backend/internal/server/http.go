@@ -83,8 +83,13 @@ func New(ctx context.Context, dbPath string) (*Server, error) {
 			r.Get("/servers/{id}/metrics", s.handleServerMetrics)
 			r.Get("/servers/{id}/config", s.handleGetServerConfig)
 			r.Put("/servers/{id}/config", s.handleUpdateServerConfig)
+			r.Get("/servers/{id}/specs", s.handleGetServerSpecs)
+			r.Put("/servers/{id}/specs", s.handleUpdateServerSpecs)
 			r.Get("/servers/{id}/console", s.handleServerConsole)
 			r.Post("/servers/{id}/console/command", s.handleServerConsoleCommand)
+			r.Get("/servers/{id}/backups", s.handleListBackups)
+			r.Post("/servers/{id}/backup", s.handleCreateBackup)
+			r.Get("/servers/{id}/backup/download", s.handleDownloadBackup)
 		})
 	})
 

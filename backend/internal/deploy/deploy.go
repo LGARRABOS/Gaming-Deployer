@@ -185,6 +185,11 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 		req.Minecraft.JVMHeap = fmt.Sprintf("%dM", heapMB)
 	}
 
+	// Default disk 50 GB if not set.
+	if req.DiskGB <= 0 {
+		req.DiskGB = 50
+	}
+
 	// Auto port: if 0, base on deployment id (25565 + id).
 	if req.Minecraft.Port == 0 && j.DeploymentID != nil {
 		base := 25565

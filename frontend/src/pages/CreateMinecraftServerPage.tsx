@@ -27,7 +27,6 @@ interface FormState {
   name: string;
   cores: number;
   memory_mb: number;
-  disk_gb: number;
   minecraft: MinecraftConfig;
 }
 
@@ -37,7 +36,6 @@ export const CreateMinecraftServerPage: React.FC = () => {
     name: "",
     cores: 2,
     memory_mb: 4096,
-    disk_gb: 30,
     minecraft: {
       edition: "java",
       version: "1.21.1",
@@ -78,8 +76,9 @@ export const CreateMinecraftServerPage: React.FC = () => {
     setSubmitting(true);
     setError(null);
     try {
-      await apiPost("/api/deployments/validate", form);
-      const res = await apiPost<{ deployment_id: number }>("/api/deployments", form);
+      const payload = { ...form, disk_gb: 50 };
+      await apiPost("/api/deployments/validate", payload);
+      const res = await apiPost<{ deployment_id: number }>("/api/deployments", payload);
       navigate(`/deployments/${res.deployment_id}`);
     } catch (e: unknown) {
       setError((e as Error).message ?? "Erreur lors de la création du déploiement");
@@ -130,17 +129,10 @@ export const CreateMinecraftServerPage: React.FC = () => {
                 <option value={32768}>32 GB</option>
               </select>
             </label>
-            <label>
-              <span>Disque (GB)</span>
-              <input
-                type="number"
-                value={form.disk_gb}
-                onChange={(e) => update("disk_gb", Number(e.target.value))}
-                min={10}
-                max={500}
-              />
-            </label>
           </div>
+          <p className="page-panel-desc" style={{ marginTop: "0.5rem" }}>
+            Stockage par défaut : 50 Go.
+          </p>
         </section>
 
         <section className="card page-panel">

@@ -17,6 +17,7 @@ import (
 
 	"github.com/example/proxmox-game-deployer/internal/config"
 	"github.com/example/proxmox-game-deployer/internal/deploy"
+	"github.com/example/proxmox-game-deployer/internal/proxmox"
 	"github.com/example/proxmox-game-deployer/internal/sshexec"
 )
 
@@ -564,6 +565,232 @@ func (s *Server) getServerRCONConfig(ctx context.Context, deploymentID int64) (p
 		return 0, "", fmt.Errorf("invalid rcon config")
 	}
 	return port, password, nil
+}
+
+// getServerProxmoxTarget returns node, vmid and parsed request for a successful deployment (for Proxmox API calls).
+func (s *Server) getServerProxmoxTarget(ctx context.Context, deploymentID int64) (node string, vmid int64, req deploy.MinecraftDeploymentRequest, err error) {
+	row := s.DB.Sql().QueryRowContext(ctx, `
+		SELECT request_json, vmid FROM deployments
+		WHERE id = ? AND game = ? AND status = ?
+	`, deploymentID, "minecraft", string(deploy.StatusSuccess))
+	var reqJSON string
+	var vmidNull sql.NullInt64
+	if err := row.Scan(&reqJSON, &vmidNull); err != nil {
+		return "", 0, req, err
+	}
+	if !vmidNull.Valid {
+		return "", 0, req, fmt.Errorf("no vmid")
+	}
+	if err := json.Unmarshal([]byte(reqJSON), &req); err != nil {
+		return "", 0, req, err
+	}
+	node = req.Node
+	if node == "" {
+		cfg, _ := config.LoadProxmoxConfig(ctx, s.DB)
+		if cfg != nil {
+			node = cfg.DefaultNode
+		}
+	}
+	return node, vmidNull.Int64, req, nil
+}
+
+// handleGetServerSpecs returns current VM specs (cores, memory_mb, disk_gb) from deployment request.
+func (s *Server) handleGetServerSpecs(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	_, _, req, err := s.getServerProxmoxTarget(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	diskGB := req.DiskGB
+	if diskGB <= 0 {
+		diskGB = 50
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"cores":      req.Cores,
+		"memory_mb":  req.MemoryMB,
+		"disk_gb":   diskGB,
+	})
+}
+
+// handleUpdateServerSpecs updates VM resources in Proxmox and in the deployment request_json.
+func (s *Server) handleUpdateServerSpecs(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	var body struct {
+		Cores    int `json:"cores"`
+		MemoryMB int `json:"memory_mb"`
+		DiskGB   int `json:"disk_gb"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if body.Cores <= 0 || body.MemoryMB <= 0 || body.DiskGB <= 0 {
+		http.Error(w, "cores, memory_mb and disk_gb must be positive", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	node, vmid, req, err := s.getServerProxmoxTarget(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	cfg, err := config.LoadProxmoxConfig(ctx, s.DB)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	client, err := proxmox.NewClient(cfg.APIURL, cfg.APITokenID, cfg.APITokenSecret)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := client.UpdateVMConfig(ctx, node, int(vmid), body.Cores, body.MemoryMB); err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "Proxmox config: " + err.Error()})
+		return
+	}
+	if body.DiskGB != req.DiskGB {
+		upid, err := client.ResizeDisk(ctx, node, int(vmid), body.DiskGB)
+		if err != nil {
+			writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "Resize disk: " + err.Error()})
+			return
+		}
+		if upid != "" {
+			if err := client.WaitForTask(ctx, node, upid, 30*time.Minute); err != nil {
+				writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "Resize task: " + err.Error()})
+				return
+			}
+		}
+	}
+	req.Cores = body.Cores
+	req.MemoryMB = body.MemoryMB
+	req.DiskGB = body.DiskGB
+	rawReq, _ := json.Marshal(req)
+	_, _ = s.DB.Sql().ExecContext(ctx, `UPDATE deployments SET request_json = ?, updated_at = ? WHERE id = ?`, string(rawReq), time.Now().UTC(), deploymentID)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// handleListBackups lists backup files in mc_dir/backups/ on the VM.
+func (s *Server) handleListBackups(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	ip, sshUser, err := s.getServerSSHTarget(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	mcDir, _, err := s.getServerMinecraftPath(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	keyPath := sshexec.KeyPath()
+	// List .tar.gz in backups folder; use basename only for display
+	cmd := fmt.Sprintf("ls -1 %s/backups/*.tar.gz 2>/dev/null | xargs -I {} basename {}", mcDir)
+	stdout, _, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, "sudo "+cmd)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "files": []string{}})
+		return
+	}
+	var files []string
+	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
+		name := strings.TrimSpace(line)
+		if name != "" {
+			files = append(files, name)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "files": files})
+}
+
+// handleCreateBackup creates a compressed backup of the minecraft directory on the VM.
+func (s *Server) handleCreateBackup(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	ip, sshUser, err := s.getServerSSHTarget(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	mcDir, mcUser, err := s.getServerMinecraftPath(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	keyPath := sshexec.KeyPath()
+	// Ensure backups dir exists, then tar the minecraft dir (as mc_user to preserve ownership in archive)
+	// Parent and base for -C parent base
+	parent := mcDir
+	base := "minecraft"
+	if idx := strings.LastIndex(mcDir, "/"); idx > 0 {
+		parent = mcDir[:idx]
+		base = mcDir[idx+1:]
+	}
+	ts := time.Now().Format("20060102-150405")
+	backupName := fmt.Sprintf("mc-%s.tar.gz", ts)
+	backupPath := mcDir + "/backups/" + backupName
+	// Run as mcuser so backup dir and file are owned by mcuser (no permission issues)
+	cmd := fmt.Sprintf("sudo -u %s sh -c 'mkdir -p %s/backups && tar czf %s -C %s %s'", mcUser, mcDir, backupPath, parent, base)
+	stdout, stderr, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, cmd)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error(), "stderr": stderr, "stdout": stdout})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "file": backupName})
+}
+
+// handleDownloadBackup streams a backup file from the VM. Query param: file=basename.
+func (s *Server) handleDownloadBackup(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	file := r.URL.Query().Get("file")
+	if file == "" || strings.Contains(file, "/") || strings.Contains(file, "..") {
+		http.Error(w, "invalid file parameter", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	ip, sshUser, err := s.getServerSSHTarget(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	mcDir, _, err := s.getServerMinecraftPath(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	keyPath := sshexec.KeyPath()
+	fullPath := mcDir + "/backups/" + file
+	cmd := "sudo cat " + fullPath
+	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", file))
+	if err := sshexec.RunCommandStream(ctx, ip, sshUser, keyPath, cmd, w); err != nil {
+		http.Error(w, "download failed: "+err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func parseServerProperties(raw string) map[string]string {

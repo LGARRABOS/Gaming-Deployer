@@ -81,3 +81,22 @@ func StreamCommand(ctx context.Context, host, user, keyPath, command string, onL
 	}
 	return nil
 }
+
+// RunCommandStream runs a remote command and streams stdout to w (e.g. for downloading a file via "cat").
+func RunCommandStream(ctx context.Context, host, user, keyPath, command string, w io.Writer) error {
+	if keyPath == "" {
+		keyPath = KeyPath()
+	}
+	args := []string{
+		"-i", keyPath,
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "ConnectTimeout=15",
+		fmt.Sprintf("%s@%s", user, host),
+		command,
+	}
+	cmd := exec.CommandContext(ctx, "ssh", args...)
+	cmd.Stdout = w
+	cmd.Stderr = nil
+	return cmd.Run()
+}
