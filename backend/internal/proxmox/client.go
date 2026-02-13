@@ -206,6 +206,25 @@ func (c *Client) DeleteVM(ctx context.Context, node string, vmid int) (string, e
 	return taskID, nil
 }
 
+// VMStatusCurrent holds the current VM resource usage from status/current.
+type VMStatusCurrent struct {
+	CPU    float64 `json:"cpu"`     // 0..1 (fraction of CPU) or percentage
+	Mem    int64   `json:"mem"`     // used memory in bytes
+	MaxMem int64   `json:"maxmem"`  // max memory in bytes
+	Disk   int64   `json:"disk"`    // used disk in bytes (often 0 if no guest agent)
+	MaxDisk int64  `json:"maxdisk"` // max disk in bytes
+}
+
+// GetVMStatusCurrent returns current CPU, memory and disk usage for a VM (same as Proxmox UI).
+func (c *Client) GetVMStatusCurrent(ctx context.Context, node string, vmid int) (*VMStatusCurrent, error) {
+	path := fmt.Sprintf("/nodes/%s/qemu/%d/status/current", node, vmid)
+	var out VMStatusCurrent
+	if err := c.do(ctx, http.MethodGet, path, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // WaitForTask waits for a Proxmox task to complete.
 func (c *Client) WaitForTask(ctx context.Context, node, upid string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)

@@ -324,7 +324,7 @@ func (s *Server) handleServerStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"status": status})
 }
 
-// handleServerMetrics returns CPU usage %, RAM and disk usage from the VM (for live monitoring).
+// handleServerMetrics returns CPU, RAM and disk from the Proxmox API (same values as the Proxmox UI).
 func (s *Server) handleServerMetrics(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
@@ -333,80 +333,59 @@ func (s *Server) handleServerMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	ip, sshUser, err := s.getServerSSHTarget(ctx, deploymentID)
+	node, vmid, _, err := s.getServerProxmoxTarget(ctx, deploymentID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	keyPath := sshexec.KeyPath()
-	// One SSH: two samples of /proc/stat 1s apart for CPU %, then mem and disk
-	cmd := `grep '^cpu ' /proc/stat; sleep 1; grep '^cpu ' /proc/stat; free -b | grep ^Mem; df -B1 / | tail -1`
-	stdout, stderr, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, cmd)
+	cfg, err := config.LoadProxmoxConfig(ctx, s.DB)
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error(), "stderr": stderr})
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	client, err := proxmox.NewClient(cfg.APIURL, cfg.APITokenID, cfg.APITokenSecret)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	status, err := client.GetVMStatusCurrent(ctx, node, int(vmid))
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
 	out := map[string]any{"ok": true}
-
-	// CPU: first line = cpu user nice system idle iowait irq softirq ... (fields 1-7 at least)
-	if len(lines) >= 2 {
-		parseCPU := func(line string) (total, idle int64) {
-			fields := strings.Fields(line)
-			if len(fields) < 8 || fields[0] != "cpu" {
-				return 0, 0
-			}
-			for i := 1; i <= 7; i++ {
-				n, _ := strconv.ParseInt(fields[i], 10, 64)
-				total += n
-			}
-			idle1, _ := strconv.ParseInt(fields[4], 10, 64) // idle
-			idle2, _ := strconv.ParseInt(fields[5], 10, 64) // iowait
-			idle = idle1 + idle2
-			return total, idle
-		}
-		t1, i1 := parseCPU(lines[0])
-		t2, i2 := parseCPU(lines[1])
-		if t2 > t1 {
-			totalDelta := t2 - t1
-			idleDelta := i2 - i1
-			if totalDelta > 0 {
-				pct := 100.0 * (1.0 - float64(idleDelta)/float64(totalDelta))
-				if pct < 0 {
-					pct = 0
-				}
-				if pct > 100 {
-					pct = 100
-				}
-				out["cpu_usage_percent"] = pct
-			}
-		}
+	// CPU: Proxmox returns 0..1 (fraction) or sometimes 0..100; normalize to 0-100%
+	cpuPct := status.CPU * 100
+	if cpuPct > 100 {
+		cpuPct = 100
 	}
-
-	// Mem: line 2 and 3 are cpu, so Mem is index 2 (0-based: lines[2])
-	memIdx := 2
-	if len(lines) > memIdx {
-		fields := strings.Fields(lines[memIdx])
-		if len(fields) >= 7 && fields[0] == "Mem:" {
-			total, _ := strconv.ParseInt(fields[1], 10, 64)
-			used, _ := strconv.ParseInt(fields[2], 10, 64)
-			avail, _ := strconv.ParseInt(fields[6], 10, 64)
-			out["mem_total_bytes"] = total
-			out["mem_used_bytes"] = used
-			out["mem_available_bytes"] = avail
-		}
+	out["cpu_usage_percent"] = cpuPct
+	out["mem_used_bytes"] = status.Mem
+	out["mem_total_bytes"] = status.MaxMem
+	if status.MaxMem > 0 {
+		out["mem_available_bytes"] = status.MaxMem - status.Mem
 	}
-	// df: next line after Mem
-	diskIdx := 3
-	if len(lines) > diskIdx {
-		fields := strings.Fields(lines[diskIdx])
-		if len(fields) >= 4 {
-			total, _ := strconv.ParseInt(fields[1], 10, 64)
-			used, _ := strconv.ParseInt(fields[2], 10, 64)
-			avail, _ := strconv.ParseInt(fields[3], 10, 64)
-			out["disk_total_bytes"] = total
-			out["disk_used_bytes"] = used
-			out["disk_available_bytes"] = avail
+	// Disk: Proxmox status/current often has maxdisk from config; used disk may be 0 without guest agent
+	out["disk_used_bytes"] = status.Disk
+	out["disk_total_bytes"] = status.MaxDisk
+	if status.MaxDisk > 0 {
+		out["disk_available_bytes"] = status.MaxDisk - status.Disk
+	}
+	// If disk usage not reported by Proxmox (0), fallback to SSH df for disk only
+	if status.MaxDisk == 0 || status.Disk == 0 {
+		ip, sshUser, err := s.getServerSSHTarget(ctx, deploymentID)
+		if err == nil {
+			keyPath := sshexec.KeyPath()
+			stdout, _, _ := sshexec.RunCommand(ctx, ip, sshUser, keyPath, "df -B1 / | tail -1")
+			fields := strings.Fields(stdout)
+			if len(fields) >= 4 {
+				total, _ := strconv.ParseInt(fields[1], 10, 64)
+				used, _ := strconv.ParseInt(fields[2], 10, 64)
+				avail, _ := strconv.ParseInt(fields[3], 10, 64)
+				out["disk_total_bytes"] = total
+				out["disk_used_bytes"] = used
+				out["disk_available_bytes"] = avail
+			}
 		}
 	}
 	writeJSON(w, http.StatusOK, out)
