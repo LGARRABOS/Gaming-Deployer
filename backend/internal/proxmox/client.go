@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
+	"strconv"
 	"time"
 )
 
@@ -155,6 +157,35 @@ func (c *Client) UpdateVMConfig(ctx context.Context, node string, vmid, cores, m
 		q.Set("memory", fmt.Sprintf("%d", memoryMB))
 	}
 	return c.do(ctx, http.MethodPost, path, q, nil)
+}
+
+// GetScsi0SizeGB returns the current size in GB of the scsi0 disk from the VM config.
+// The config value is like "local-lvm:vm-100-disk-0,size=32G". Returns 0 if not found or parse error.
+func (c *Client) GetScsi0SizeGB(ctx context.Context, node string, vmid int) (int, error) {
+	path := fmt.Sprintf("/nodes/%s/qemu/%d/config", node, vmid)
+	var config map[string]interface{}
+	if err := c.do(ctx, http.MethodGet, path, nil, &config); err != nil {
+		return 0, err
+	}
+	raw, ok := config["scsi0"]
+	if !ok {
+		return 0, nil
+	}
+	s, _ := raw.(string)
+	if s == "" {
+		return 0, nil
+	}
+	// Match size=32G or size=32
+	re := regexp.MustCompile(`size=(\d+)G?`)
+	m := re.FindStringSubmatch(s)
+	if len(m) < 2 {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0, nil
+	}
+	return n, nil
 }
 
 // ResizeDisk adjusts the size of a VM disk using the Proxmox resize endpoint.

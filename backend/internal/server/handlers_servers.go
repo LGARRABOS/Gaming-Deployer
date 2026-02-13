@@ -640,6 +640,10 @@ func (s *Server) handleUpdateServerSpecs(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if body.DiskGB != req.DiskGB {
+		if body.DiskGB < req.DiskGB {
+			writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "Le rétrécissement du disque n'est pas supporté par Proxmox. Indiquez une taille supérieure ou égale à la taille actuelle."})
+			return
+		}
 		upid, err := client.ResizeDisk(ctx, node, int(vmid), body.DiskGB)
 		if err != nil {
 			writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "Resize disk: " + err.Error()})
@@ -728,8 +732,9 @@ func (s *Server) handleCreateBackup(w http.ResponseWriter, r *http.Request) {
 	ts := time.Now().Format("20060102-150405")
 	backupName := fmt.Sprintf("mc-%s.tar.gz", ts)
 	backupPath := mcDir + "/backups/" + backupName
+	// Exclude backups/ so we don't pack previous .tar.gz into the new backup (no double compression).
 	// Run as mcuser so backup dir and file are owned by mcuser (no permission issues)
-	cmd := fmt.Sprintf("sudo -u %s sh -c 'mkdir -p %s/backups && tar czf %s -C %s %s'", mcUser, mcDir, backupPath, parent, base)
+	cmd := fmt.Sprintf("sudo -u %s sh -c 'mkdir -p %s/backups && tar czf %s -C %s --exclude=%s/backups %s'", mcUser, mcDir, backupPath, parent, base, base)
 	stdout, stderr, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, cmd)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error(), "stderr": stderr, "stdout": stdout})
@@ -770,6 +775,44 @@ func (s *Server) handleDownloadBackup(w http.ResponseWriter, r *http.Request) {
 	if err := sshexec.RunCommandStream(ctx, ip, sshUser, keyPath, cmd, w); err != nil {
 		http.Error(w, "download failed: "+err.Error(), http.StatusInternalServerError)
 	}
+}
+
+// handleDeleteBackup deletes a backup file from the VM. Query param: file=basename.
+func (s *Server) handleDeleteBackup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	idStr := chi.URLParam(r, "id")
+	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	file := r.URL.Query().Get("file")
+	if file == "" || strings.Contains(file, "/") || strings.Contains(file, "..") {
+		http.Error(w, "invalid file parameter", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	ip, sshUser, err := s.getServerSSHTarget(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	mcDir, _, err := s.getServerMinecraftPath(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	keyPath := sshexec.KeyPath()
+	fullPath := mcDir + "/backups/" + file
+	cmd := "sudo rm -f " + fullPath
+	if _, _, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, cmd); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func parseServerProperties(raw string) map[string]string {

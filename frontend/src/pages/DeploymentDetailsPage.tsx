@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { apiDelete, apiGet } from "../api/client";
+import { apiDelete, apiGet, apiPost } from "../api/client";
 import { LogsViewer } from "../components/LogsViewer";
 
 interface DeploymentRecord {
@@ -33,7 +33,22 @@ export const DeploymentDetailsPage: React.FC = () => {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [specs, setSpecs] = useState<{ cores: number; memory_mb: number; disk_gb: number } | null>(null);
+  const [specsSaving, setSpecsSaving] = useState(false);
+  const [specsMessage, setSpecsMessage] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  const fetchSpecs = useCallback(async () => {
+    if (!deploymentId) return;
+    try {
+      const res = await apiGet<{ cores: number; memory_mb: number; disk_gb: number }>(
+        `/api/servers/${deploymentId}/specs`
+      );
+      setSpecs(res);
+    } catch {
+      setSpecs(null);
+    }
+  }, [deploymentId]);
 
   useEffect(() => {
     if (!deploymentId) return;
@@ -57,6 +72,34 @@ export const DeploymentDetailsPage: React.FC = () => {
       clearInterval(interval);
     };
   }, [deploymentId]);
+
+  useEffect(() => {
+    if (deployment?.status === "success") fetchSpecs();
+  }, [deployment?.status, fetchSpecs]);
+
+  const onSaveSpecs = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!specs) return;
+    setSpecsSaving(true);
+    setSpecsMessage(null);
+    try {
+      const res = await apiPost<{ ok: boolean; error?: string }>(
+        `/api/servers/${deploymentId}/specs`,
+        { cores: specs.cores, memory_mb: specs.memory_mb, disk_gb: specs.disk_gb },
+        "PUT"
+      );
+      if (res?.ok) {
+        setSpecsMessage("Ressources mises à jour.");
+        fetchSpecs();
+      } else {
+        setSpecsMessage(res?.error ?? "Erreur");
+      }
+    } catch (e: unknown) {
+      setSpecsMessage((e as Error).message ?? "Erreur");
+    } finally {
+      setSpecsSaving(false);
+    }
+  };
 
   if (!deploymentId) return <p className="error">ID invalide</p>;
   if (loading) return <div className="card page-card"><div className="page-loading">Chargement…</div></div>;
@@ -111,6 +154,63 @@ export const DeploymentDetailsPage: React.FC = () => {
             </Link>
           </p>
         </div>
+      )}
+
+      {deployment.status === "success" && (
+        <section className="card page-panel">
+          <h2 className="page-panel-title">Ressources VM (Specs)</h2>
+          <p className="page-panel-desc">
+            Modifier le CPU, la RAM et le disque de la VM. Les changements sont appliqués sur Proxmox. Proxmox ne permet pas de réduire la taille du disque (agrandissement uniquement).
+          </p>
+          {specs && (
+            <form onSubmit={onSaveSpecs} className="server-config-form">
+              <div className="server-config-grid">
+                <label>
+                  <span>CPU (cores)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={32}
+                    value={specs.cores}
+                    onChange={(e) => setSpecs((s) => s ? { ...s, cores: Number(e.target.value) } : s)}
+                  />
+                </label>
+                <label>
+                  <span>RAM (Mo)</span>
+                  <input
+                    type="number"
+                    min={1024}
+                    step={1024}
+                    value={specs.memory_mb}
+                    onChange={(e) => setSpecs((s) => s ? { ...s, memory_mb: Number(e.target.value) } : s)}
+                  />
+                </label>
+                <label>
+                  <span>Disque (Go)</span>
+                  <input
+                    type="number"
+                    min={10}
+                    max={500}
+                    value={specs.disk_gb}
+                    onChange={(e) => setSpecs((s) => s ? { ...s, disk_gb: Number(e.target.value) } : s)}
+                    title="Agrandissement uniquement (Proxmox ne supporte pas la réduction)"
+                  />
+                </label>
+              </div>
+              <div className="server-config-actions">
+                <button type="submit" className="server-btn server-btn--primary" disabled={specsSaving}>
+                  {specsSaving ? "Enregistrement…" : "Appliquer"}
+                </button>
+                {specsMessage && (
+                  <span className={specsMessage.includes("mises à jour") ? "success" : "error"}>
+                    {specsMessage}
+                  </span>
+                )}
+              </div>
+            </form>
+          )}
+          {!specs && <p className="page-panel-desc">Chargement des specs…</p>}
+        </section>
       )}
 
       <section className="card page-panel">

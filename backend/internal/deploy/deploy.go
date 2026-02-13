@@ -282,18 +282,24 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 			return err
 		}
 
-		// Ajuste la taille du disque principal (scsi0) si une valeur spécifique
-		// a été demandée dans le formulaire. On passe une taille absolue en Go,
-		// ce qui correspond à: qm resize <vmid> scsi0 <diskGB>G.
+		// Ajuste la taille du disque principal (scsi0) uniquement si la taille demandée
+		// est supérieure à celle du template (Proxmox ne permet pas de réduire un disque).
 		if req.DiskGB > 0 {
-			appendLog(ctx, db, *deploymentID, "info", fmt.Sprintf("Resizing VM disk to %dG", req.DiskGB))
-			if upid, err := c.ResizeDisk(ctx, req.Node, vmid, req.DiskGB); err != nil {
-				appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Resize disk failed: %v", err))
-				return err
-			} else if upid != "" {
-				if err := c.WaitForTask(ctx, req.Node, upid, 30*time.Minute); err != nil {
-					appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Resize disk task failed: %v", err))
+			currentGB, errCur := c.GetScsi0SizeGB(ctx, req.Node, vmid)
+			if errCur != nil {
+				appendLog(ctx, db, *deploymentID, "info", fmt.Sprintf("Could not read current disk size: %v, skipping resize", errCur))
+			} else if req.DiskGB <= currentGB {
+				appendLog(ctx, db, *deploymentID, "info", fmt.Sprintf("Disk already %dG (template), requested %dG — no resize (Proxmox does not support shrinking)", currentGB, req.DiskGB))
+			} else {
+				appendLog(ctx, db, *deploymentID, "info", fmt.Sprintf("Resizing VM disk from %dG to %dG", currentGB, req.DiskGB))
+				if upid, err := c.ResizeDisk(ctx, req.Node, vmid, req.DiskGB); err != nil {
+					appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Resize disk failed: %v", err))
 					return err
+				} else if upid != "" {
+					if err := c.WaitForTask(ctx, req.Node, upid, 30*time.Minute); err != nil {
+						appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Resize disk task failed: %v", err))
+						return err
+					}
 				}
 			}
 		}

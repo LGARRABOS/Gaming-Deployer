@@ -719,6 +719,15 @@ input[type="checkbox"] {
   background: #0284c7;
 }
 
+.server-btn--danger {
+  background: #b91c1c;
+  color: #fff;
+}
+
+.server-btn--danger:hover:not(:disabled) {
+  background: #991b1b;
+}
+
 /* SFTP dans le panel */
 .server-backups-actions {
   margin-bottom: 1.25rem;

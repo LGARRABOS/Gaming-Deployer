@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { apiGet, apiPost } from "../api/client";
+import { apiDelete, apiGet, apiPost } from "../api/client";
 import { ServerConsole } from "../components/ServerConsole";
 import { ServerMetrics } from "../components/ServerMetrics";
 
@@ -17,7 +17,7 @@ interface ServerInfo {
 }
 
 type ServiceStatus = "active" | "inactive" | "failed" | "unknown";
-type TabId = "console" | "config" | "specs" | "backups" | "sftp";
+type TabId = "console" | "config" | "backups" | "sftp";
 
 export const ServerDashboardPage: React.FC = () => {
   const { id } = useParams();
@@ -32,11 +32,10 @@ export const ServerDashboardPage: React.FC = () => {
   const [configMessage, setConfigMessage] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>("console");
-  const [specs, setSpecs] = useState<{ cores: number; memory_mb: number; disk_gb: number } | null>(null);
-  const [specsSaving, setSpecsSaving] = useState(false);
-  const [specsMessage, setSpecsMessage] = useState<string | null>(null);
   const [backupFiles, setBackupFiles] = useState<string[]>([]);
   const [backupCreating, setBackupCreating] = useState(false);
+  const [backupDeleting, setBackupDeleting] = useState<string | null>(null);
+  const [backupError, setBackupError] = useState<string | null>(null);
 
   const copyToClipboard = useCallback((text: string, label: string) => {
     navigator.clipboard.writeText(text).then(
@@ -82,18 +81,6 @@ export const ServerDashboardPage: React.FC = () => {
     }
   }, [serverId]);
 
-  const fetchSpecs = useCallback(async () => {
-    if (!serverId) return;
-    try {
-      const res = await apiGet<{ cores: number; memory_mb: number; disk_gb: number }>(
-        `/api/servers/${serverId}/specs`
-      );
-      setSpecs(res);
-    } catch {
-      setSpecs(null);
-    }
-  }, [serverId]);
-
   const fetchBackups = useCallback(async () => {
     if (!serverId) return;
     try {
@@ -112,10 +99,9 @@ export const ServerDashboardPage: React.FC = () => {
     if (!server) return;
     fetchStatus();
     fetchConfig();
-    fetchSpecs();
     const t = setInterval(() => fetchStatus(), 10000);
     return () => clearInterval(t);
-  }, [server, fetchStatus, fetchConfig, fetchSpecs]);
+  }, [server, fetchStatus, fetchConfig]);
 
   useEffect(() => {
     if (activeTab === "backups" && serverId) fetchBackups();
@@ -141,30 +127,6 @@ export const ServerDashboardPage: React.FC = () => {
     }
   };
 
-  const onSaveSpecs = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!specs) return;
-    setSpecsSaving(true);
-    setSpecsMessage(null);
-    try {
-      const res = await apiPost<{ ok: boolean; error?: string }>(
-        `/api/servers/${serverId}/specs`,
-        { cores: specs.cores, memory_mb: specs.memory_mb, disk_gb: specs.disk_gb },
-        "PUT"
-      );
-      if (res?.ok) {
-        setSpecsMessage("Ressources mises à jour.");
-        fetchSpecs();
-      } else {
-        setSpecsMessage(res?.error ?? "Erreur");
-      }
-    } catch (e: unknown) {
-      setSpecsMessage((e as Error).message ?? "Erreur");
-    } finally {
-      setSpecsSaving(false);
-    }
-  };
-
   const onCreateBackup = async () => {
     setBackupCreating(true);
     try {
@@ -177,6 +139,19 @@ export const ServerDashboardPage: React.FC = () => {
       }
     } finally {
       setBackupCreating(false);
+    }
+  };
+
+  const onDeleteBackup = async (file: string) => {
+    setBackupDeleting(file);
+    setBackupError(null);
+    try {
+      await apiDelete(`/api/servers/${serverId}/backup?file=${encodeURIComponent(file)}`);
+      fetchBackups();
+    } catch (e: unknown) {
+      setBackupError((e as Error).message ?? "Erreur lors de la suppression");
+    } finally {
+      setBackupDeleting(null);
     }
   };
 
@@ -219,7 +194,6 @@ export const ServerDashboardPage: React.FC = () => {
   const tabs: { id: TabId; label: string }[] = [
     { id: "console", label: "Console & performances" },
     { id: "config", label: "Configuration" },
-    { id: "specs", label: "Specs VM" },
     { id: "backups", label: "Sauvegardes" },
     { id: "sftp", label: "Connexion SFTP" },
   ];
@@ -372,62 +346,6 @@ export const ServerDashboardPage: React.FC = () => {
           </section>
         )}
 
-        {activeTab === "specs" && (
-          <section className="card server-panel server-panel--wide">
-            <h2 className="server-panel-title">Ressources VM</h2>
-            <p className="server-panel-desc">
-              Modifier le CPU, la RAM et le disque de la VM. Les changements sont appliqués sur Proxmox (redémarrage possible pour la RAM selon l’hyperviseur).
-            </p>
-            {specs && (
-              <form onSubmit={onSaveSpecs} className="server-config-form">
-                <div className="server-config-grid">
-                  <label>
-                    <span>CPU (cores)</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={32}
-                      value={specs.cores}
-                      onChange={(e) => setSpecs((s) => s ? { ...s, cores: Number(e.target.value) } : s)}
-                    />
-                  </label>
-                  <label>
-                    <span>RAM (Mo)</span>
-                    <input
-                      type="number"
-                      min={1024}
-                      step={1024}
-                      value={specs.memory_mb}
-                      onChange={(e) => setSpecs((s) => s ? { ...s, memory_mb: Number(e.target.value) } : s)}
-                    />
-                  </label>
-                  <label>
-                    <span>Disque (Go)</span>
-                    <input
-                      type="number"
-                      min={10}
-                      max={500}
-                      value={specs.disk_gb}
-                      onChange={(e) => setSpecs((s) => s ? { ...s, disk_gb: Number(e.target.value) } : s)}
-                    />
-                  </label>
-                </div>
-                <div className="server-config-actions">
-                  <button type="submit" className="server-btn server-btn--primary" disabled={specsSaving}>
-                    {specsSaving ? "Enregistrement…" : "Appliquer"}
-                  </button>
-                  {specsMessage && (
-                    <span className={specsMessage.includes("mises à jour") ? "success" : "error"}>
-                      {specsMessage}
-                    </span>
-                  )}
-                </div>
-              </form>
-            )}
-            {!specs && <p className="server-panel-desc">Chargement des specs…</p>}
-          </section>
-        )}
-
         {activeTab === "backups" && (
           <section className="card server-panel server-panel--wide">
             <h2 className="server-panel-title">Sauvegardes</h2>
@@ -444,6 +362,7 @@ export const ServerDashboardPage: React.FC = () => {
                 {backupCreating ? "Création…" : "Créer une sauvegarde"}
               </button>
             </div>
+            {backupError && <p className="error server-panel-error">{backupError}</p>}
             <div className="server-backups-list">
               {backupFiles.length === 0 ? (
                 <p className="server-panel-desc">Aucune sauvegarde pour le moment.</p>
@@ -461,6 +380,15 @@ export const ServerDashboardPage: React.FC = () => {
                       >
                         Télécharger
                       </a>
+                      <button
+                        type="button"
+                        className="server-btn server-btn--danger"
+                        onClick={() => onDeleteBackup(file)}
+                        disabled={backupDeleting === file}
+                        title="Supprimer cette sauvegarde"
+                      >
+                        {backupDeleting === file ? "…" : "Supprimer"}
+                      </button>
                     </li>
                   ))}
                 </ul>
