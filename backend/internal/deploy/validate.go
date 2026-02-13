@@ -17,11 +17,17 @@ func ValidateMinecraftRequest(req MinecraftDeploymentRequest) error {
 	if req.Cores > 4 {
 		return errors.New("cores must be <= 4")
 	}
-	if req.MemoryMB < 1024 {
-		return errors.New("memory must be at least 1024 MB")
+	// RAM: only predefined options (4, 8, 12, 16, 24, 32 GB).
+	allowedRAM := map[int]bool{
+		4096: true,  // 4 GB
+		8192: true,  // 8 GB
+		12288: true, // 12 GB
+		16384: true, // 16 GB
+		24576: true, // 24 GB
+		32768: true, // 32 GB
 	}
-	if req.MemoryMB > 32768 {
-		return errors.New("memory must be <= 32768 MB (32 GB)")
+	if !allowedRAM[req.MemoryMB] {
+		return errors.New("memory must be one of: 4096, 8192, 12288, 16384, 24576, 32768 MB (4, 8, 12, 16, 24, 32 GB)")
 	}
 	if req.DiskGB < 10 {
 		return errors.New("disk must be at least 10 GB")

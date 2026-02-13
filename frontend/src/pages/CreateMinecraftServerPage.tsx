@@ -115,14 +115,18 @@ export const CreateMinecraftServerPage: React.FC = () => {
           />
         </label>
         <label>
-          RAM (MB) (max 32768)
-          <input
-            type="number"
+          RAM
+          <select
             value={form.memory_mb}
             onChange={(e) => update("memory_mb", Number(e.target.value))}
-            min={1024}
-            max={32768}
-          />
+          >
+            <option value={4096}>4 GB</option>
+            <option value={8192}>8 GB</option>
+            <option value={12288}>12 GB</option>
+            <option value={16384}>16 GB</option>
+            <option value={24576}>24 GB</option>
+            <option value={32768}>32 GB</option>
+          </select>
         </label>
         <label>
           Disque (GB) (max 500)
