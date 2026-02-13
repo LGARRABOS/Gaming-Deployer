@@ -44,9 +44,10 @@
       failed_when: wait_dpkg_java.rc != 0
       changed_when: false
 
-    - name: Install Java runtime
+    # Minecraft 1.21.x requires Java 21 (class file 65.0). Java 17 (61.0) is too old.
+    - name: Install Java 21 runtime
       apt:
-        name: openjdk-17-jre-headless
+        name: openjdk-21-jre-headless
         state: present
       when: ansible_os_family == "Debian"
 
