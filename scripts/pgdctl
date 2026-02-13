@@ -24,7 +24,7 @@ usage() {
 pgdctl - Proxmox Game Deployer control script
 
 Usage:
-  pgdctl update      # pull + build + restart (manuel, verbeux)
+  pgdctl update      # pull + build + restart (manual, verbose)
   pgdctl status      # show main service status
   pgdctl restart     # restart main service
   pgdctl logs        # tail main service logs
@@ -45,10 +45,17 @@ case "$cmd" in
 
     cd "$REPO_DIR"
 
-    echo "[1/4] Updating Git repository (origin/main)..."
+    echo "[1/4] Checking for updates (origin/main)..."
     git fetch origin main
+    LOCAL="$(git rev-parse HEAD)"
+    REMOTE="$(git rev-parse origin/main)"
+    if [[ "$LOCAL" == "$REMOTE" ]]; then
+      echo ""
+      echo "==> No update available (already up to date with origin/main)."
+      exit 0
+    fi
     git reset --hard origin/main
-    echo "    Git repository is up to date."
+    echo "    Git repository updated."
     echo ""
 
     echo "[2/4] Building frontend..."
