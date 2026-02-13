@@ -11,8 +11,8 @@
     - name: Wait for dpkg lock to be released (Cloud-Init / unattended-upgrades)
       when: ansible_os_family == "Debian"
       shell: |
-        for i in $(seq 1 60); do
-          fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock >/dev/null 2>&1 || exit 0
+        for i in $(seq 1 90); do
+          fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock >/dev/null 2>&1 || exit 0
           sleep 2
         done
         exit 1
@@ -29,6 +29,18 @@
       apt:
         update_cache: true
       when: ansible_os_family == "Debian"
+
+    - name: Wait for dpkg lock before Java install (Cloud-Init / unattended-upgrades)
+      when: ansible_os_family == "Debian"
+      shell: |
+        for i in $(seq 1 90); do
+          fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock >/dev/null 2>&1 || exit 0
+          sleep 2
+        done
+        exit 1
+      register: wait_dpkg_java
+      failed_when: wait_dpkg_java.rc != 0
+      changed_when: false
 
     - name: Install Java runtime
       apt:
