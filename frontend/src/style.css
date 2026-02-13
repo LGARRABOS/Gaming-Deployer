@@ -799,6 +799,11 @@ input[type="checkbox"] {
   min-height: 1.4em;
 }
 
+.server-console-line--error {
+  color: #f87171;
+  font-weight: 500;
+}
+
 .server-console-placeholder {
   color: #64748b;
   font-style: italic;

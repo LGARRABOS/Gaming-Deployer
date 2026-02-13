@@ -41,7 +41,16 @@ func New(ctx context.Context, dbPath string) (*Server, error) {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(60 * time.Second))
+	// Timeout 60s for most routes; exclude long-lived SSE (console stream)
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if req.Method == http.MethodGet && strings.Contains(req.URL.Path, "/servers/") && strings.HasSuffix(req.URL.Path, "/console") {
+				next.ServeHTTP(w, req)
+				return
+			}
+			middleware.Timeout(60 * time.Second)(next).ServeHTTP(w, req)
+		})
+	})
 
 	// Public endpoints (used before initialization).
 	r.Route("/api", func(r chi.Router) {

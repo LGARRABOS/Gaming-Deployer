@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -253,9 +254,37 @@ func (s *Server) handleServerConsole(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
-	if flusher, ok := w.(http.Flusher); ok {
+	flusher, _ := w.(http.Flusher)
+	if flusher != nil {
 		flusher.Flush()
 	}
+
+	var mu sync.Mutex
+	writeSSE := func(data []byte) error {
+		mu.Lock()
+		defer mu.Unlock()
+		if _, err := w.Write(data); err != nil {
+			return err
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+		return nil
+	}
+
+	// Keepalive so proxies and clients don't close the connection when the server is idle
+	go func() {
+		ticker := time.NewTicker(25 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				_ = writeSSE([]byte(": keepalive\n\n"))
+			}
+		}
+	}()
 
 	onLine := func(line string) error {
 		select {
@@ -263,14 +292,7 @@ func (s *Server) handleServerConsole(w http.ResponseWriter, r *http.Request) {
 			return ctx.Err()
 		default:
 		}
-		// SSE: "data: " + payload + "\n\n"
-		if _, err := w.Write([]byte("data: " + line + "\n\n")); err != nil {
-			return err
-		}
-		if flusher, ok := w.(http.Flusher); ok {
-			flusher.Flush()
-		}
-		return nil
+		return writeSSE([]byte("data: " + line + "\n\n"))
 	}
 	_ = sshexec.StreamCommand(ctx, ip, sshUser, keyPath, command, onLine)
 }
