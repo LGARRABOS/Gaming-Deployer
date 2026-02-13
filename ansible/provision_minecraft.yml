@@ -8,6 +8,18 @@
     mc_service_name: minecraft
 
   tasks:
+    - name: Wait for dpkg lock to be released (Cloud-Init / unattended-upgrades)
+      when: ansible_os_family == "Debian"
+      shell: |
+        for i in $(seq 1 60); do
+          fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock >/dev/null 2>&1 || exit 0
+          sleep 2
+        done
+        exit 1
+      register: wait_dpkg
+      failed_when: wait_dpkg.rc != 0
+      changed_when: false
+
     - name: Ensure minecraft group exists
       group:
         name: "{{ mc_user }}"
