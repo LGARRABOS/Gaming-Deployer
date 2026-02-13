@@ -45,15 +45,18 @@ export const LogsViewer: React.FC<Props> = ({ deploymentId }) => {
   const list = logs ?? [];
 
   return (
-    <div className="logs-viewer">
-      {list.map((l) => (
-        <div key={l.id} className={`log log-${l.level.toLowerCase()}`}>
-          <span className="log-ts">{new Date(l.ts).toLocaleTimeString()}</span>
-          <span className="log-level">{l.level.toUpperCase()}</span>
-          <span className="log-message">{l.message}</span>
-        </div>
-      ))}
-      {list.length === 0 && <p>Aucun log pour le moment.</p>}
+    <div className="logs-viewer logs-viewer--panel">
+      {list.length === 0 ? (
+        <p className="logs-viewer-empty">Aucun log pour le moment.</p>
+      ) : (
+        list.map((l) => (
+          <div key={l.id} className={`log log-${l.level.toLowerCase()}`}>
+            <span className="log-ts">{new Date(l.ts).toLocaleTimeString()}</span>
+            <span className="log-level">{l.level.toUpperCase()}</span>
+            <span className="log-message">{l.message}</span>
+          </div>
+        ))
+      )}
     </div>
   );
 };

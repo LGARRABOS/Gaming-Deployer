@@ -61,161 +61,172 @@ export const CreateMinecraftServerPage: React.FC = () => {
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
-  const update = (field: keyof FormState, value: any) => {
+  const update = (field: keyof FormState, value: unknown) => {
     setForm((f) => ({ ...f, [field]: value }));
   };
 
-  const updateMinecraft = (field: keyof MinecraftConfig, value: any) => {
+  const updateMinecraft = (field: keyof MinecraftConfig, value: unknown) => {
     setForm((f) => ({ ...f, minecraft: { ...f.minecraft, [field]: value } }));
   };
 
   const parseList = (value: string): string[] =>
-    value
-      .split(",")
-      .map((v) => v.trim())
-      .filter(Boolean);
+    value.split(",").map((v) => v.trim()).filter(Boolean);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
-    setSuccess(null);
     try {
-      // Validate via backend endpoint first.
       await apiPost("/api/deployments/validate", form);
       const res = await apiPost<{ deployment_id: number }>("/api/deployments", form);
-      setSuccess(`Déploiement créé (ID ${res.deployment_id})`);
       navigate(`/deployments/${res.deployment_id}`);
-    } catch (e: any) {
-      setError(e.message ?? "Erreur lors de la création du déploiement");
+    } catch (e: unknown) {
+      setError((e as Error).message ?? "Erreur lors de la création du déploiement");
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="card">
-      <h1>Créer un serveur Minecraft</h1>
-      <form onSubmit={onSubmit} className="form-grid">
-        <h2>VM</h2>
-        <label>
-          Nom de la VM
-          <input value={form.name} onChange={(e) => update("name", e.target.value)} required />
-        </label>
-        <label>
-          CPU (cores)
-          <input
-            type="number"
-            value={form.cores}
-            onChange={(e) => update("cores", Number(e.target.value))}
-            min={1}
-            max={4}
-          />
-        </label>
-        <label>
-          RAM
-          <select
-            value={form.memory_mb}
-            onChange={(e) => update("memory_mb", Number(e.target.value))}
-          >
-            <option value={4096}>4 GB</option>
-            <option value={8192}>8 GB</option>
-            <option value={12288}>12 GB</option>
-            <option value={16384}>16 GB</option>
-            <option value={24576}>24 GB</option>
-            <option value={32768}>32 GB</option>
-          </select>
-        </label>
-        <label>
-          Disque (GB) (max 500)
-          <input
-            type="number"
-            value={form.disk_gb}
-            onChange={(e) => update("disk_gb", Number(e.target.value))}
-            min={10}
-            max={500}
-          />
-        </label>
-        <h2>Minecraft</h2>
-        <label>
-          Version
-          <input
-            value={form.minecraft.version}
-            onChange={(e) => updateMinecraft("version", e.target.value)}
-          />
-        </label>
-        <label>
-          Type
-          <select
-            value={form.minecraft.type}
-            onChange={(e) => updateMinecraft("type", e.target.value as MinecraftConfig["type"])}
-          >
-            <option value="vanilla">Vanilla</option>
-            <option value="paper">Paper</option>
-            <option value="purpur">Purpur</option>
-            <option value="forge">Forge</option>
-            <option value="fabric">Fabric</option>
-          </select>
-        </label>
-        {/* Le port Minecraft et les ports additionnels sont maintenant
-            attribués automatiquement côté serveur. */}
-        <label>
-          EULA accepté
-          <input
-            type="checkbox"
-            checked={form.minecraft.eula}
-            onChange={(e) => updateMinecraft("eula", e.target.checked)}
-          />
-        </label>
-        <label>
-          Max joueurs
-          <input
-            type="number"
-            value={form.minecraft.max_players}
-            onChange={(e) => updateMinecraft("max_players", Number(e.target.value))}
-          />
-        </label>
-        <label>
-          Online mode
-          <input
-            type="checkbox"
-            checked={form.minecraft.online_mode}
-            onChange={(e) => updateMinecraft("online_mode", e.target.checked)}
-          />
-        </label>
-        <label>
-          MOTD
-          <input
-            value={form.minecraft.motd}
-            onChange={(e) => updateMinecraft("motd", e.target.value)}
-          />
-        </label>
-        <label>
-          Whitelist (pseudos séparés par virgule)
-          <input
-            value={form.minecraft.whitelist.join(",")}
-            onChange={(e) => updateMinecraft("whitelist", parseList(e.target.value))}
-          />
-        </label>
-        <label>
-          Ops (pseudos séparés par virgule)
-          <input
-            value={form.minecraft.operators.join(",")}
-            onChange={(e) => updateMinecraft("operators", parseList(e.target.value))}
-          />
-        </label>
-        {/* Backups configurés automatiquement (24h, rétention 2 jours). */}
+    <div className="page-wrap create-server-page">
+      <header className="page-header">
+        <h1>Créer un serveur Minecraft</h1>
+        <p className="page-subtitle">
+          Configure la VM et les options Minecraft, puis lance le déploiement.
+        </p>
+      </header>
 
-        {error && <p className="error">{error}</p>}
-        {success && <p className="success">{success}</p>}
+      <form onSubmit={onSubmit} className="create-server-form">
+        <section className="card page-panel">
+          <h2 className="page-panel-title">VM</h2>
+          <p className="page-panel-desc">Ressources et nom de la machine virtuelle.</p>
+          <div className="form-grid form-grid--wide">
+            <label>
+              <span>Nom de la VM</span>
+              <input value={form.name} onChange={(e) => update("name", e.target.value)} required />
+            </label>
+            <label>
+              <span>CPU (cores)</span>
+              <input
+                type="number"
+                value={form.cores}
+                onChange={(e) => update("cores", Number(e.target.value))}
+                min={1}
+                max={4}
+              />
+            </label>
+            <label>
+              <span>RAM</span>
+              <select
+                value={form.memory_mb}
+                onChange={(e) => update("memory_mb", Number(e.target.value))}
+              >
+                <option value={4096}>4 GB</option>
+                <option value={8192}>8 GB</option>
+                <option value={12288}>12 GB</option>
+                <option value={16384}>16 GB</option>
+                <option value={24576}>24 GB</option>
+                <option value={32768}>32 GB</option>
+              </select>
+            </label>
+            <label>
+              <span>Disque (GB)</span>
+              <input
+                type="number"
+                value={form.disk_gb}
+                onChange={(e) => update("disk_gb", Number(e.target.value))}
+                min={10}
+                max={500}
+              />
+            </label>
+          </div>
+        </section>
 
-        <button type="submit" disabled={submitting}>
-          {submitting ? "Envoi..." : "Déployer"}
-        </button>
+        <section className="card page-panel">
+          <h2 className="page-panel-title">Minecraft</h2>
+          <p className="page-panel-desc">Version, type de serveur et paramètres de jeu.</p>
+          <div className="form-grid form-grid--wide">
+            <label>
+              <span>Version</span>
+              <input
+                value={form.minecraft.version}
+                onChange={(e) => updateMinecraft("version", e.target.value)}
+              />
+            </label>
+            <label>
+              <span>Type</span>
+              <select
+                value={form.minecraft.type}
+                onChange={(e) => updateMinecraft("type", e.target.value as MinecraftConfig["type"])}
+              >
+                <option value="vanilla">Vanilla</option>
+                <option value="paper">Paper</option>
+                <option value="purpur">Purpur</option>
+                <option value="forge">Forge</option>
+                <option value="fabric">Fabric</option>
+              </select>
+            </label>
+            <label className="form-check">
+              <input
+                type="checkbox"
+                checked={form.minecraft.eula}
+                onChange={(e) => updateMinecraft("eula", e.target.checked)}
+              />
+              <span>EULA accepté</span>
+            </label>
+            <label>
+              <span>Max joueurs</span>
+              <input
+                type="number"
+                value={form.minecraft.max_players}
+                onChange={(e) => updateMinecraft("max_players", Number(e.target.value))}
+              />
+            </label>
+            <label className="form-check">
+              <input
+                type="checkbox"
+                checked={form.minecraft.online_mode}
+                onChange={(e) => updateMinecraft("online_mode", e.target.checked)}
+              />
+              <span>Mode en ligne</span>
+            </label>
+            <label style={{ gridColumn: "1 / -1" }}>
+              <span>MOTD</span>
+              <input
+                value={form.minecraft.motd}
+                onChange={(e) => updateMinecraft("motd", e.target.value)}
+              />
+            </label>
+            <label style={{ gridColumn: "1 / -1" }}>
+              <span>Whitelist (pseudos séparés par des virgules)</span>
+              <input
+                value={form.minecraft.whitelist.join(", ")}
+                onChange={(e) => updateMinecraft("whitelist", parseList(e.target.value))}
+              />
+            </label>
+            <label style={{ gridColumn: "1 / -1" }}>
+              <span>Ops (pseudos séparés par des virgules)</span>
+              <input
+                value={form.minecraft.operators.join(", ")}
+                onChange={(e) => updateMinecraft("operators", parseList(e.target.value))}
+              />
+            </label>
+          </div>
+        </section>
+
+        {error && (
+          <div className="card page-panel page-panel--error">
+            <p className="error">{error}</p>
+          </div>
+        )}
+
+        <div className="form-actions">
+          <button type="submit" className="btn btn--primary btn--large" disabled={submitting}>
+            {submitting ? "Déploiement en cours…" : "Déployer le serveur"}
+          </button>
+        </div>
       </form>
     </div>
   );
 };
-

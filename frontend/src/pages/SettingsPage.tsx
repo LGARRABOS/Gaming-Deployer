@@ -28,32 +28,21 @@ export const SettingsPage: React.FC = () => {
     const load = async () => {
       try {
         const cfg = await apiGet<ProxmoxConfigForm>("/api/setup/config");
-        if (!cancelled) {
-          // On ne renvoie pas le secret existant, donc on laisse le champ vide
-          // pour indiquer "inchangé" tant que l'utilisateur ne saisit rien.
-          setForm({ ...cfg, api_token_secret: "" });
-        }
-        // Charger (et éventuellement générer) la clé publique gérée par l'app.
+        if (!cancelled) setForm({ ...cfg, api_token_secret: "" });
         try {
-          const keyRes = await apiGet<{ public_key: string }>(
-            "/api/setup/ssh-key"
-          );
-          if (!cancelled) {
-            setAppPublicKey(keyRes.public_key);
-          }
-        } catch (e) {
-          // On ne bloque pas la page si la récup de la clé échoue.
+          const keyRes = await apiGet<{ public_key: string }>("/api/setup/ssh-key");
+          if (!cancelled) setAppPublicKey(keyRes.public_key);
+        } catch {
+          // ignore
         }
-      } catch (e: any) {
-        if (!cancelled) setError(e.message ?? "Erreur chargement configuration");
+      } catch (e: unknown) {
+        if (!cancelled) setError((e as Error).message ?? "Erreur chargement configuration");
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
     load();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -67,16 +56,13 @@ export const SettingsPage: React.FC = () => {
     setSshKeyMessage(null);
     setError(null);
     try {
-      const res = await apiPost<{ public_key: string }>(
-        "/api/setup/ssh-key/regenerate",
-        {}
-      );
+      const res = await apiPost<{ public_key: string }>("/api/setup/ssh-key/regenerate", {});
       setAppPublicKey(res.public_key);
       setSshKeyMessage(
-        `Nouvelle clé SSH générée pour l'utilisateur "${form?.ssh_user}". Pense à la copier dans la configuration Cloud-Init de Proxmox (clé publique + utilisateur).`
+        `Nouvelle clé générée. Copie-la dans la config Cloud-Init Proxmox (utilisateur : ${form?.ssh_user}).`
       );
-    } catch (e: any) {
-      setError(e.message ?? "Erreur lors de la régénération de la clé SSH");
+    } catch (e: unknown) {
+      setError((e as Error).message ?? "Erreur lors de la régénération de la clé SSH");
     }
   };
 
@@ -87,27 +73,19 @@ export const SettingsPage: React.FC = () => {
     setError(null);
     try {
       let res: { ok: boolean; error?: string };
-      if (form.api_token_secret && form.api_token_secret.trim() !== "") {
-        // L'utilisateur teste un nouveau secret explicite.
-        res = await apiPost<{ ok: boolean; error?: string }>(
-          "/api/setup/test-proxmox",
-          {
-            api_url: form.api_url,
-            api_token_id: form.api_token_id,
-            api_token_secret: form.api_token_secret,
-          }
-        );
+      if (form.api_token_secret?.trim() !== "") {
+        res = await apiPost<{ ok: boolean; error?: string }>("/api/setup/test-proxmox", {
+          api_url: form.api_url,
+          api_token_id: form.api_token_id,
+          api_token_secret: form.api_token_secret,
+        });
       } else {
-        // Utilise la configuration existante côté serveur (secret déjà stocké).
-        res = await apiPost<{ ok: boolean; error?: string }>(
-          "/api/setup/test-proxmox-current",
-          {}
-        );
+        res = await apiPost<{ ok: boolean; error?: string }>("/api/setup/test-proxmox-current", {});
       }
       if (res.ok) setTestResult("Connexion Proxmox OK");
-      else setTestResult(`Échec connexion Proxmox: ${res.error ?? "inconnue"}`);
-    } catch (e: any) {
-      setError(e.message ?? "Erreur de test Proxmox");
+      else setTestResult(`Échec : ${res.error ?? "inconnu"}`);
+    } catch (e: unknown) {
+      setError((e as Error).message ?? "Erreur de test Proxmox");
     } finally {
       setTesting(false);
     }
@@ -119,137 +97,109 @@ export const SettingsPage: React.FC = () => {
     setSaving(true);
     setError(null);
     try {
-      await apiPost<{ ok: boolean }>("/api/setup/config", {
-        proxmox: form,
-      });
-      setTestResult("Configuration mise à jour.");
-    } catch (e: any) {
-      setError(e.message ?? "Erreur lors de la mise à jour de la configuration");
+      await apiPost<{ ok: boolean }>("/api/setup/config", { proxmox: form });
+      setTestResult("Configuration enregistrée.");
+    } catch (e: unknown) {
+      setError((e as Error).message ?? "Erreur lors de l'enregistrement");
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) return <p>Chargement...</p>;
-  if (!form) return <p className="error">Configuration introuvable.</p>;
+  if (loading) return <div className="card page-card"><div className="page-loading">Chargement…</div></div>;
+  if (!form) return <div className="card page-card"><p className="error">Configuration introuvable.</p></div>;
 
   return (
-    <div className="card">
-      <h1>Paramètres Proxmox</h1>
-      <p>Modifier la configuration de la connexion Proxmox et de l'accès SSH.</p>
-
-      <form onSubmit={onSubmit} className="form-grid">
-        <h2>Proxmox</h2>
-        <label>
-          API URL
-          <input name="api_url" value={form.api_url} onChange={onChange} required />
-        </label>
-        <label>
-          Token ID
-          <input
-            name="api_token_id"
-            value={form.api_token_id}
-            onChange={onChange}
-            required
-          />
-        </label>
-        <label>
-          Token Secret (laisser vide pour ne pas le changer)
-          <input
-            name="api_token_secret"
-            type="password"
-            value={form.api_token_secret}
-            onChange={onChange}
-            placeholder="••••••••••"
-          />
-        </label>
-        <label>
-          Node par défaut
-          <input
-            name="default_node"
-            value={form.default_node}
-            onChange={onChange}
-            required
-          />
-        </label>
-        <label>
-          Storage par défaut
-          <input
-            name="default_storage"
-            value={form.default_storage}
-            onChange={onChange}
-            required
-          />
-        </label>
-        <label>
-          Bridge par défaut
-          <input
-            name="default_bridge"
-            value={form.default_bridge}
-            onChange={onChange}
-            required
-          />
-        </label>
-        <label>
-          Template VMID (cloud-init)
-          <input
-            name="template_vmid"
-            type="number"
-            value={form.template_vmid}
-            onChange={onChange}
-            required
-          />
-        </label>
-        <label>
-          Utilisateur SSH
-          <input
-            name="ssh_user"
-            value={form.ssh_user}
-            onChange={onChange}
-            required
-          />
-        </label>
-
-        <button type="button" onClick={testConnection} disabled={testing}>
-          {testing ? "Test en cours..." : "Tester connexion Proxmox"}
-        </button>
-        {testResult && <p className="hint">{testResult}</p>}
-
-        {error && <p className="error">{error}</p>}
-
-        <button type="submit" disabled={saving}>
-          {saving ? "Enregistrement..." : "Enregistrer la configuration"}
-        </button>
-      </form>
-
-      <hr className="section-separator" />
-
-      <section>
-        <h2>Clé SSH de l'application</h2>
-        <p className="hint">
-          Cette clé est utilisée par l'application pour se connecter aux VMs
-          via Ansible. Copie la clé publique ci-dessous et associe-la à
-          l'utilisateur SSH <code>{form.ssh_user}</code> dans la configuration
-          Cloud-Init de Proxmox pour ton template.
+    <div className="page-wrap settings-page">
+      <header className="page-header">
+        <h1>Paramètres</h1>
+        <p className="page-subtitle">
+          Connexion Proxmox et clé SSH utilisée par l'application pour les déploiements.
         </p>
+      </header>
 
-        <label>
-          Clé publique gérée par l'application
-          <textarea
-            readOnly
-            value={appPublicKey ?? ""}
-            className="ssh-pubkey-textarea"
-            rows={4}
-          />
-        </label>
+      <form onSubmit={onSubmit} className="settings-form">
+        <section className="card page-panel">
+          <h2 className="page-panel-title">Proxmox</h2>
+          <p className="page-panel-desc">URL API, token et valeurs par défaut (node, storage, bridge, template).</p>
+          <div className="form-grid form-grid--wide">
+            <label>
+              <span>API URL</span>
+              <input name="api_url" value={form.api_url} onChange={onChange} required />
+            </label>
+            <label>
+              <span>Token ID</span>
+              <input name="api_token_id" value={form.api_token_id} onChange={onChange} required />
+            </label>
+            <label>
+              <span>Token Secret (vide = ne pas modifier)</span>
+              <input
+                name="api_token_secret"
+                type="password"
+                value={form.api_token_secret}
+                onChange={onChange}
+                placeholder="••••••••"
+              />
+            </label>
+            <label>
+              <span>Node par défaut</span>
+              <input name="default_node" value={form.default_node} onChange={onChange} required />
+            </label>
+            <label>
+              <span>Storage par défaut</span>
+              <input name="default_storage" value={form.default_storage} onChange={onChange} required />
+            </label>
+            <label>
+              <span>Bridge par défaut</span>
+              <input name="default_bridge" value={form.default_bridge} onChange={onChange} required />
+            </label>
+            <label>
+              <span>Template VMID (cloud-init)</span>
+              <input
+                name="template_vmid"
+                type="number"
+                value={form.template_vmid}
+                onChange={onChange}
+                required
+              />
+            </label>
+            <label>
+              <span>Utilisateur SSH</span>
+              <input name="ssh_user" value={form.ssh_user} onChange={onChange} required />
+            </label>
+          </div>
+          <div className="form-actions">
+            <button type="button" className="btn btn--secondary" onClick={testConnection} disabled={testing}>
+              {testing ? "Test en cours…" : "Tester la connexion Proxmox"}
+            </button>
+            {testResult && <span className={testResult.startsWith("Connexion") || testResult.startsWith("Configuration") ? "success" : "hint"}>{testResult}</span>}
+          </div>
+          {error && <p className="error">{error}</p>}
+          <div className="form-actions" style={{ marginTop: "1rem" }}>
+            <button type="submit" className="btn btn--primary" disabled={saving}>
+              {saving ? "Enregistrement…" : "Enregistrer la configuration"}
+            </button>
+          </div>
+        </section>
 
-        <button type="button" onClick={regenerateSSHKey}>
-          Régénérer la clé SSH de l'application
-        </button>
-
-        {sshKeyMessage && <p className="hint">{sshKeyMessage}</p>}
-      </section>
+        <section className="card page-panel">
+          <h2 className="page-panel-title">Clé SSH de l'application</h2>
+          <p className="page-panel-desc">
+            Cette clé est utilisée pour se connecter aux VMs via Ansible. Copie la clé publique ci-dessous
+            et associe-la à l'utilisateur <code>{form.ssh_user}</code> dans la configuration Cloud-Init de ton template Proxmox.
+          </p>
+          <label>
+            <span>Clé publique</span>
+            <textarea readOnly value={appPublicKey ?? ""} className="ssh-pubkey-textarea" rows={4} />
+          </label>
+          <div className="form-actions">
+            <button type="button" className="btn btn--secondary" onClick={regenerateSSHKey}>
+              Régénérer la clé SSH
+            </button>
+          </div>
+          {sshKeyMessage && <p className="hint">{sshKeyMessage}</p>}
+        </section>
+      </form>
     </div>
   );
 };
-

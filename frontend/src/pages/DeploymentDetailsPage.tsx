@@ -17,6 +17,13 @@ interface DeploymentRecord {
   updated_at: string;
 }
 
+const statusLabel: Record<string, string> = {
+  queued: "En attente",
+  running: "En cours",
+  success: "Succès",
+  failed: "Échec",
+};
+
 export const DeploymentDetailsPage: React.FC = () => {
   const { id } = useParams();
   const deploymentId = Number(id);
@@ -36,25 +43,25 @@ export const DeploymentDetailsPage: React.FC = () => {
       try {
         const data = await apiGet<DeploymentRecord>(`/api/deployments/${deploymentId}`);
         if (!cancelled) setDeployment(data);
-      } catch (e: any) {
-        if (!cancelled) setError(e.message ?? "Erreur chargement déploiement");
+      } catch (e: unknown) {
+        if (!cancelled) setError((e as Error).message ?? "Erreur chargement déploiement");
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
 
     fetchDeployment();
-    const id = setInterval(fetchDeployment, 5000);
+    const interval = setInterval(fetchDeployment, 5000);
     return () => {
       cancelled = true;
-      clearInterval(id);
+      clearInterval(interval);
     };
   }, [deploymentId]);
 
   if (!deploymentId) return <p className="error">ID invalide</p>;
-  if (loading) return <p>Chargement...</p>;
-  if (error) return <p className="error">{error}</p>;
-  if (!deployment) return <p className="error">Déploiement introuvable</p>;
+  if (loading) return <div className="card page-card"><div className="page-loading">Chargement…</div></div>;
+  if (error) return <div className="card page-card"><p className="error">{error}</p></div>;
+  if (!deployment) return <div className="card page-card"><p className="error">Déploiement introuvable</p></div>;
 
   const onDelete = async () => {
     setDeleting(true);
@@ -62,55 +69,91 @@ export const DeploymentDetailsPage: React.FC = () => {
     try {
       await apiDelete(`/api/deployments/${deploymentId}`);
       navigate("/deployments");
-    } catch (e: any) {
-      setDeleteError(e.message ?? "Erreur lors de la suppression du déploiement");
+    } catch (e: unknown) {
+      setDeleteError((e as Error).message ?? "Erreur lors de la suppression");
     } finally {
       setDeleting(false);
     }
   };
 
   return (
-    <div className="card">
-      <h1>Détails déploiement #{deployment.id}</h1>
-      <p>
-        Statut: <strong>{deployment.status}</strong>
-      </p>
-      {deployment.error_message && <p className="error">{deployment.error_message}</p>}
-      {deployment.status === "success" && (
-        <p className="hint">
-          Gestion du serveur (démarrage, arrêt, config, SFTP) :{" "}
-          <Link to={`/servers/${deployment.id}`}>Tableau de bord serveur</Link>.
-        </p>
-      )}
+    <div className="page-wrap deployment-detail-page">
+      <nav className="page-breadcrumb">
+        <Link to="/deployments">Déploiements</Link>
+        <span className="page-breadcrumb-sep">/</span>
+        <span>#{deployment.id}</span>
+      </nav>
 
-      {!confirmingDelete && (
-        <button onClick={() => setConfirmingDelete(true)} disabled={deleting}>
-          Annuler / supprimer ce déploiement
-        </button>
-      )}
-
-      {confirmingDelete && (
-        <div className="confirm-delete">
-          <p>
-            Supprimer ce déploiement et tenter de détruire la VM associée ?
-            Cette action est définitive.
+      <header className="page-header deployment-detail-header">
+        <div>
+          <h1>Déploiement #{deployment.id}</h1>
+          <p className="page-meta">
+            {deployment.game} – {deployment.type}
           </p>
-          <div className="confirm-actions">
-            <button type="button" onClick={() => setConfirmingDelete(false)} disabled={deleting}>
-              Annuler
-            </button>
-            <button type="button" onClick={onDelete} disabled={deleting}>
-              {deleting ? "Suppression..." : "Confirmer la suppression"}
-            </button>
-          </div>
+        </div>
+        <span className={`deployment-status-badge deployment-status-badge--${deployment.status}`}>
+          {statusLabel[deployment.status] ?? deployment.status}
+        </span>
+      </header>
+
+      {deployment.error_message && (
+        <div className="card page-panel page-panel--error">
+          <p className="error">{deployment.error_message}</p>
         </div>
       )}
 
-      {deleteError && <p className="error">{deleteError}</p>}
+      {deployment.status === "success" && (
+        <div className="card page-panel">
+          <p className="page-panel-desc">
+            Le serveur est déployé. Pour le gérer (démarrage, arrêt, configuration, SFTP) :{" "}
+            <Link to={`/servers/${deployment.id}`} className="link-cta">
+              Ouvrir le tableau de bord serveur →
+            </Link>
+          </p>
+        </div>
+      )}
 
-      <h2>Logs</h2>
-      <LogsViewer deploymentId={deploymentId} />
+      <section className="card page-panel">
+        <h2 className="page-panel-title">Logs du déploiement</h2>
+        <LogsViewer deploymentId={deploymentId} />
+      </section>
+
+      <section className="card page-panel page-panel--danger">
+        <h2 className="page-panel-title">Supprimer le déploiement</h2>
+        <p className="page-panel-desc">
+          Supprimer ce déploiement et tenter de détruire la VM associée. Cette action est définitive.
+        </p>
+        {!confirmingDelete ? (
+          <button
+            type="button"
+            className="btn btn--secondary btn--danger"
+            onClick={() => setConfirmingDelete(true)}
+            disabled={deleting}
+          >
+            Supprimer ce déploiement
+          </button>
+        ) : (
+          <div className="confirm-actions">
+            <button
+              type="button"
+              className="btn btn--secondary"
+              onClick={() => setConfirmingDelete(false)}
+              disabled={deleting}
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger"
+              onClick={onDelete}
+              disabled={deleting}
+            >
+              {deleting ? "Suppression…" : "Confirmer la suppression"}
+            </button>
+          </div>
+        )}
+        {deleteError && <p className="error confirm-error">{deleteError}</p>}
+      </section>
     </div>
   );
 };
-

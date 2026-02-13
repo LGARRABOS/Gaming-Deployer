@@ -45,18 +45,15 @@ export const SetupWizard: React.FC = () => {
     setTestResult(null);
     setError(null);
     try {
-      const res = await apiPost<{ ok: boolean; error?: string }>(
-        "/api/setup/test-proxmox",
-        {
-          api_url: form.api_url,
-          api_token_id: form.api_token_id,
-          api_token_secret: form.api_token_secret,
-        }
-      );
+      const res = await apiPost<{ ok: boolean; error?: string }>("/api/setup/test-proxmox", {
+        api_url: form.api_url,
+        api_token_id: form.api_token_id,
+        api_token_secret: form.api_token_secret,
+      });
       if (res.ok) setTestResult("Connexion Proxmox OK");
-      else setTestResult(`Échec connexion Proxmox: ${res.error ?? "inconnue"}`);
-    } catch (e: any) {
-      setError(e.message ?? "Erreur de test Proxmox");
+      else setTestResult(`Échec : ${res.error ?? "inconnu"}`);
+    } catch (e: unknown) {
+      setError((e as Error).message ?? "Erreur de test Proxmox");
     } finally {
       setTesting(false);
     }
@@ -68,7 +65,7 @@ export const SetupWizard: React.FC = () => {
     setError(null);
     try {
       if (adminPass !== adminPassConfirm) {
-        setError("Les mots de passe administrateur ne correspondent pas.");
+        setError("Les mots de passe ne correspondent pas.");
         setSaving(false);
         return;
       }
@@ -77,101 +74,94 @@ export const SetupWizard: React.FC = () => {
         admin: { username: adminUser, password: adminPass },
       });
       navigate("/login");
-    } catch (e: any) {
-      setError(e.message ?? "Erreur lors de l'initialisation");
+    } catch (e: unknown) {
+      setError((e as Error).message ?? "Erreur lors de l'initialisation");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="card">
-      <h1>Setup initial</h1>
-      <p>Configure la connexion Proxmox et crée le compte administrateur.</p>
+    <div className="page-wrap setup-page">
+      <header className="page-header">
+        <h1>Configuration initiale</h1>
+        <p className="page-subtitle">
+          Configure la connexion Proxmox et crée le compte administrateur de l'application.
+        </p>
+      </header>
 
-      <form onSubmit={onSubmit} className="form-grid">
-        <h2>Proxmox</h2>
-        <label>
-          API URL
-          <input name="api_url" value={form.api_url} onChange={onChange} required />
-        </label>
-        <label>
-          Token ID
-          <input name="api_token_id" value={form.api_token_id} onChange={onChange} required />
-        </label>
-        <label>
-          Token Secret
-          <input
-            name="api_token_secret"
-            type="password"
-            value={form.api_token_secret}
-            onChange={onChange}
-            required
-          />
-        </label>
-        <label>
-          Node par défaut
-          <input name="default_node" value={form.default_node} onChange={onChange} required />
-        </label>
-        <label>
-          Storage par défaut
-          <input name="default_storage" value={form.default_storage} onChange={onChange} required />
-        </label>
-        <label>
-          Bridge par défaut
-          <input name="default_bridge" value={form.default_bridge} onChange={onChange} required />
-        </label>
-        <label>
-          Template VMID (cloud-init)
-          <input
-            name="template_vmid"
-            type="number"
-            value={form.template_vmid}
-            onChange={onChange}
-            required
-          />
-        </label>
-        <label>
-          Utilisateur SSH
-          <input name="ssh_user" value={form.ssh_user} onChange={onChange} required />
-        </label>
+      <form onSubmit={onSubmit} className="setup-form">
+        <section className="card page-panel">
+          <h2 className="page-panel-title">Proxmox</h2>
+          <p className="page-panel-desc">URL API, token et paramètres par défaut.</p>
+          <div className="form-grid form-grid--wide">
+            <label>
+              <span>API URL</span>
+              <input name="api_url" value={form.api_url} onChange={onChange} required />
+            </label>
+            <label>
+              <span>Token ID</span>
+              <input name="api_token_id" value={form.api_token_id} onChange={onChange} required />
+            </label>
+            <label>
+              <span>Token Secret</span>
+              <input name="api_token_secret" type="password" value={form.api_token_secret} onChange={onChange} required />
+            </label>
+            <label>
+              <span>Node par défaut</span>
+              <input name="default_node" value={form.default_node} onChange={onChange} required />
+            </label>
+            <label>
+              <span>Storage par défaut</span>
+              <input name="default_storage" value={form.default_storage} onChange={onChange} required />
+            </label>
+            <label>
+              <span>Bridge par défaut</span>
+              <input name="default_bridge" value={form.default_bridge} onChange={onChange} required />
+            </label>
+            <label>
+              <span>Template VMID (cloud-init)</span>
+              <input name="template_vmid" type="number" value={form.template_vmid} onChange={onChange} required />
+            </label>
+            <label>
+              <span>Utilisateur SSH</span>
+              <input name="ssh_user" value={form.ssh_user} onChange={onChange} required />
+            </label>
+          </div>
+          <div className="form-actions">
+            <button type="button" className="btn btn--secondary" onClick={testConnection} disabled={testing}>
+              {testing ? "Test…" : "Tester la connexion Proxmox"}
+            </button>
+            {testResult && <span className={testResult.startsWith("Connexion") ? "success" : "hint"}>{testResult}</span>}
+          </div>
+          {error && <p className="error">{error}</p>}
+        </section>
 
-        <button type="button" onClick={testConnection} disabled={testing}>
-          {testing ? "Test en cours..." : "Tester connexion Proxmox"}
-        </button>
-        {testResult && <p className="hint">{testResult}</p>}
+        <section className="card page-panel">
+          <h2 className="page-panel-title">Compte administrateur</h2>
+          <p className="page-panel-desc">Identifiants pour te connecter à l'interface après l'initialisation.</p>
+          <div className="form-grid form-grid--wide">
+            <label>
+              <span>Nom d'utilisateur</span>
+              <input value={adminUser} onChange={(e) => setAdminUser(e.target.value)} required />
+            </label>
+            <label>
+              <span>Mot de passe</span>
+              <input type="password" value={adminPass} onChange={(e) => setAdminPass(e.target.value)} required />
+            </label>
+            <label>
+              <span>Confirmer le mot de passe</span>
+              <input type="password" value={adminPassConfirm} onChange={(e) => setAdminPassConfirm(e.target.value)} required />
+            </label>
+          </div>
+        </section>
 
-        <h2>Compte admin</h2>
-        <label>
-          Nom d'utilisateur
-          <input value={adminUser} onChange={(e) => setAdminUser(e.target.value)} required />
-        </label>
-        <label>
-          Mot de passe
-          <input
-            type="password"
-            value={adminPass}
-            onChange={(e) => setAdminPass(e.target.value)}
-            required
-          />
-        </label>
-        <label>
-          Confirmer le mot de passe
-          <input
-            type="password"
-            value={adminPassConfirm}
-            onChange={(e) => setAdminPassConfirm(e.target.value)}
-            required
-          />
-        </label>
-
-        {error && <p className="error">{error}</p>}
-
-        <button type="submit" disabled={saving}>
-          {saving ? "Initialisation..." : "Enregistrer la configuration"}
-        </button>
+        <div className="form-actions">
+          <button type="submit" className="btn btn--primary btn--large" disabled={saving}>
+            {saving ? "Initialisation…" : "Enregistrer et terminer"}
+          </button>
+        </div>
       </form>
     </div>
   );
 };
-

@@ -16,36 +16,45 @@ export const LoginPage: React.FC = () => {
     try {
       await apiPost("/api/login", { username, password });
       navigate("/deployments");
-    } catch (e: any) {
-      setError(e.message ?? "Erreur d'authentification");
+    } catch (e: unknown) {
+      setError((e as Error).message ?? "Erreur d'authentification");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="card">
-      <h1>Connexion admin</h1>
-      <form onSubmit={onSubmit} className="form-grid">
-        <label>
-          Nom d'utilisateur
-          <input value={username} onChange={(e) => setUsername(e.target.value)} required />
-        </label>
-        <label>
-          Mot de passe
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-        </label>
-        {error && <p className="error">{error}</p>}
-        <button type="submit" disabled={loading}>
-          {loading ? "Connexion..." : "Se connecter"}
-        </button>
-      </form>
+    <div className="auth-main">
+      <div className="card login-card">
+        <h1 className="login-title">Connexion</h1>
+        <p className="login-subtitle">Identifiants administrateur</p>
+        <form onSubmit={onSubmit} className="login-form">
+          <label>
+            <span>Nom d'utilisateur</span>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              autoComplete="username"
+            />
+          </label>
+          <label>
+            <span>Mot de passe</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="current-password"
+            />
+          </label>
+          {error && <p className="error login-error">{error}</p>}
+          <button type="submit" className="btn btn--primary btn--large btn--full" disabled={loading}>
+            {loading ? "Connexion…" : "Se connecter"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 };
-
