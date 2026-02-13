@@ -316,19 +316,21 @@ textarea:focus {
   box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.25);
 }
 
-/* Pas de spin buttons natifs sur les champs number */
+/* Pas de spin buttons natifs sur les champs number (partout : déploiement, serveur, paramètres, etc.) */
 input[type="number"] {
   -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
-  -webkit-appearance: none;
+  -webkit-appearance: none !important;
+  appearance: none !important;
   margin: 0;
-}
-
-input[type="number"] {
-  appearance: textfield;
+  opacity: 0;
+  pointer-events: none;
+  height: 0;
+  width: 0;
 }
 
 /* Select : flèche personnalisée (on garde une indentation pour la flèche) */
