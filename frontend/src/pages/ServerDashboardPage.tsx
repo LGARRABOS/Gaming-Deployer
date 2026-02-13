@@ -194,6 +194,28 @@ export const ServerDashboardPage: React.FC = () => {
           </p>
           <div className="sftp-info">
             <div className="info-row">
+              <span className="info-label">Hôte</span>
+              <code className="info-value">{server.ip}</code>
+              <button
+                type="button"
+                className="btn-copy"
+                onClick={() => copyToClipboard(server.ip, "Hôte copié")}
+              >
+                Copier
+              </button>
+            </div>
+            <div className="info-row">
+              <span className="info-label">Port</span>
+              <code className="info-value">22</code>
+              <button
+                type="button"
+                className="btn-copy"
+                onClick={() => copyToClipboard("22", "Port copié")}
+              >
+                Copier
+              </button>
+            </div>
+            <div className="info-row">
               <span className="info-label">Utilisateur</span>
               <code className="info-value">{server.sftp_user}</code>
               <button
@@ -217,8 +239,8 @@ export const ServerDashboardPage: React.FC = () => {
             </div>
           </div>
           <p className="hint">
-            L’hôte et le port (22) ne sont pas affichés. Utilise le bouton ci-dessous pour copier
-            toutes les infos (hôte inclus) et les coller dans ton client SFTP.
+            L’Copier chaque champ ou tout en un clic ci-dessous
+            pour te connecter en SFTP.
           </p>
           <p>
             <button
