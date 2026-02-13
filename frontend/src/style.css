@@ -751,6 +751,59 @@ input[type="checkbox"] {
   font-size: 0.9rem;
 }
 
+/* Console serveur Minecraft (logs en direct) */
+.server-console-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.server-console-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.server-console-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+
+.server-console-actions .server-btn {
+  margin: 0;
+}
+
+.server-console-error {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.server-console-output {
+  background: #0a0e14;
+  border: 1px solid #1e293b;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: #94a3b8;
+  max-height: 420px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.server-console-line {
+  min-height: 1.4em;
+}
+
+.server-console-placeholder {
+  color: #64748b;
+  font-style: italic;
+}
+
 /* ----- Pages communes (Déploiements, Paramètres, etc.) ----- */
 .page-wrap {
   max-width: 100%;

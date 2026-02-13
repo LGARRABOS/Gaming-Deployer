@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
+import { ServerConsole } from "../components/ServerConsole";
 
 interface ServerInfo {
   id: number;
@@ -314,6 +315,9 @@ export const ServerDashboardPage: React.FC = () => {
             </div>
           </form>
         </section>
+
+        {/* Console en direct */}
+        <ServerConsole serverId={serverId} />
       </div>
     </div>
   );

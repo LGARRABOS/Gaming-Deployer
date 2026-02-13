@@ -182,6 +182,49 @@ func (s *Server) handleServerAction(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "stdout": stdout})
 }
 
+// handleServerConsole streams the Minecraft service logs (journalctl -u minecraft -f) as SSE.
+func (s *Server) handleServerConsole(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	ip, sshUser, err := s.getServerSSHTarget(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	keyPath := sshexec.KeyPath()
+	command := "sudo journalctl -u minecraft -f -n 300 --no-pager -o cat"
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+
+	onLine := func(line string) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		// SSE: "data: " + payload + "\n\n"
+		if _, err := w.Write([]byte("data: " + line + "\n\n")); err != nil {
+			return err
+		}
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		return nil
+	}
+	_ = sshexec.StreamCommand(ctx, ip, sshUser, keyPath, command, onLine)
+}
+
 // handleServerStatus returns the systemd status of the minecraft service (active/inactive/failed).
 func (s *Server) handleServerStatus(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
