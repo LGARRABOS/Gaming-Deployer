@@ -75,8 +75,6 @@ export const DeploymentDetailsPage: React.FC = () => {
       <p>
         Statut: <strong>{deployment.status}</strong>
       </p>
-      <p>VMID: {deployment.vmid ?? "-"}</p>
-      <p>IP: {deployment.ip_address ?? "-"}</p>
       {deployment.error_message && <p className="error">{deployment.error_message}</p>}
       {deployment.status === "success" && (
         <p className="hint">

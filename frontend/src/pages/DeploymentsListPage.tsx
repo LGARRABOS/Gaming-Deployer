@@ -52,8 +52,6 @@ export const DeploymentsListPage: React.FC = () => {
             <th>Jeu</th>
             <th>Type</th>
             <th>Statut</th>
-            <th>VMID</th>
-            <th>IP</th>
             <th>Créé</th>
             <th></th>
           </tr>
@@ -65,8 +63,6 @@ export const DeploymentsListPage: React.FC = () => {
               <td>{d.game}</td>
               <td>{d.type}</td>
               <td>{d.status}</td>
-              <td>{d.vmid ?? "-"}</td>
-              <td>{d.ip_address ?? "-"}</td>
               <td>{new Date(d.created_at).toLocaleString()}</td>
               <td>
                 <Link to={`/deployments/${d.id}`}>Détails</Link>

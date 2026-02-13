@@ -50,9 +50,7 @@ export const ServersListPage: React.FC = () => {
           <thead>
             <tr>
               <th>Nom</th>
-              <th>IP</th>
               <th>Port</th>
-              <th>VMID</th>
               <th>Créé le</th>
               <th></th>
             </tr>
@@ -61,9 +59,7 @@ export const ServersListPage: React.FC = () => {
             {list.map((s) => (
               <tr key={s.id}>
                 <td>{s.name}</td>
-                <td><code>{s.ip}</code></td>
                 <td>{s.port}</td>
-                <td>{s.vmid ?? "-"}</td>
                 <td>{new Date(s.created_at).toLocaleString()}</td>
                 <td>
                   <Link to={`/servers/${s.id}`} className="sidebar-link">

@@ -27,6 +27,17 @@ export const ServerDashboardPage: React.FC = () => {
   const [configProps, setConfigProps] = useState<Record<string, string>>({});
   const [configSaving, setConfigSaving] = useState(false);
   const [configMessage, setConfigMessage] = useState<string | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+
+  const copyToClipboard = useCallback((text: string, label: string) => {
+    navigator.clipboard.writeText(text).then(
+      () => {
+        setCopyFeedback(label);
+        setTimeout(() => setCopyFeedback(null), 2000);
+      },
+      () => setCopyFeedback("Erreur copie")
+    );
+  }, []);
 
   const fetchServer = useCallback(async () => {
     if (!serverId) return;
@@ -121,16 +132,17 @@ export const ServerDashboardPage: React.FC = () => {
   if (error && !server) return <p className="error">{error}</p>;
   if (!server) return <p className="error">Serveur introuvable</p>;
 
+  const sftpBlock =
+    server.sftp_user && server.sftp_password
+      ? `Hôte: ${server.ip}\nPort: 22\nUtilisateur: ${server.sftp_user}\nMot de passe: ${server.sftp_password}`
+      : "";
+
   return (
     <div className="card">
       <h1>{server.name}</h1>
-      <p>
-        <strong>IP:</strong> <code>{server.ip}</code> — <strong>Port:</strong>{" "}
-        <code>{server.port}</code>
-        {server.vmid != null && (
-          <> — <strong>VMID:</strong> {server.vmid}</>
-        )}
-      </p>
+      {copyFeedback && (
+        <p className="copy-feedback success" role="status">{copyFeedback}</p>
+      )}
       <p>
         <Link to={`/deployments/${serverId}`} className="hint">
           Voir les logs du déploiement
@@ -181,11 +193,42 @@ export const ServerDashboardPage: React.FC = () => {
             <code>/opt/minecraft</code>).
           </p>
           <div className="sftp-info">
-            <p><strong>Hôte:</strong> <code>{server.ip}</code></p>
-            <p><strong>Port:</strong> <code>22</code></p>
-            <p><strong>Utilisateur:</strong> <code>{server.sftp_user}</code></p>
-            <p><strong>Mot de passe:</strong> <code>{server.sftp_password}</code></p>
+            <div className="info-row">
+              <span className="info-label">Utilisateur</span>
+              <code className="info-value">{server.sftp_user}</code>
+              <button
+                type="button"
+                className="btn-copy"
+                onClick={() => copyToClipboard(server.sftp_user!, "Utilisateur copié")}
+              >
+                Copier
+              </button>
+            </div>
+            <div className="info-row">
+              <span className="info-label">Mot de passe</span>
+              <code className="info-value">{server.sftp_password}</code>
+              <button
+                type="button"
+                className="btn-copy"
+                onClick={() => copyToClipboard(server.sftp_password!, "Mot de passe copié")}
+              >
+                Copier
+              </button>
+            </div>
           </div>
+          <p className="hint">
+            L’hôte et le port (22) ne sont pas affichés. Utilise le bouton ci-dessous pour copier
+            toutes les infos (hôte inclus) et les coller dans ton client SFTP.
+          </p>
+          <p>
+            <button
+              type="button"
+              className="btn-copy-all"
+              onClick={() => copyToClipboard(sftpBlock, "Infos SFTP copiées")}
+            >
+              Copier toutes les infos d'accès SFTP
+            </button>
+          </p>
         </section>
       )}
 

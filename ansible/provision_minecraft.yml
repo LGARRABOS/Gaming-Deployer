@@ -63,6 +63,22 @@
         group: "{{ mc_user }}"
         mode: "0755"
 
+    - name: Enable SSH password authentication (for SFTP mcadmin access)
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication\s+'
+        line: 'PasswordAuthentication yes'
+      notify: Restart sshd
+      when: mc_admin_user is defined
+
+    - name: Enable SSH challenge-response (password) for SFTP clients
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?KbdInteractiveAuthentication\s+'
+        line: 'KbdInteractiveAuthentication yes'
+      notify: Restart sshd
+      when: mc_admin_user is defined
+
     - name: Create SFTP admin user for Minecraft
       when:
         - mc_admin_user is defined
@@ -141,3 +157,8 @@
         enabled: true
         state: started
 
+  handlers:
+    - name: Restart sshd
+      service:
+        name: "{{ 'ssh' if ansible_os_family == 'Debian' else 'sshd' }}"
+        state: restarted
