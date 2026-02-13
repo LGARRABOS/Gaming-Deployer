@@ -190,7 +190,7 @@ export const ServerDashboardPage: React.FC = () => {
           <h2>Accès SFTP (WinSCP, FileZilla…)</h2>
           <p className="hint">
             Utilise ces identifiants pour accéder aux fichiers du serveur (dossier{" "}
-            <code>/opt/minecraft</code>).
+            <code>minecraft</code> dans ton accès SFTP).
           </p>
           <div className="sftp-info">
             <div className="info-row">

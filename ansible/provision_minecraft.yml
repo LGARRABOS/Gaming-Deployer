@@ -3,8 +3,9 @@
   hosts: all
   become: true
   vars:
-    mc_user: minecraft
-    mc_dir: /opt/minecraft
+    # When mc_admin_user is set: install in their home and run as them; else classic /opt/minecraft + user minecraft
+    mc_user: "{{ mc_admin_user | default('minecraft') }}"
+    mc_dir: "{{ ('/home/' + mc_admin_user + '/minecraft') if mc_admin_user is defined else '/opt/minecraft' }}"
     mc_service_name: minecraft
 
   tasks:
@@ -20,10 +21,11 @@
       failed_when: wait_dpkg.rc != 0
       changed_when: false
 
-    - name: Ensure minecraft group exists
+    - name: Ensure minecraft group exists (only when not using mcadmin)
       group:
-        name: "{{ mc_user }}"
+        name: minecraft
         state: present
+      when: mc_admin_user is not defined
 
     - name: Ensure APT cache is updated
       apt:
@@ -48,14 +50,35 @@
         state: present
       when: ansible_os_family == "Debian"
 
-    - name: Create minecraft user
+    - name: Create minecraft user (only when not using mcadmin)
       user:
-        name: "{{ mc_user }}"
+        name: minecraft
         shell: /bin/bash
         create_home: true
-        group: "{{ mc_user }}"
+        group: minecraft
+      when: mc_admin_user is not defined
 
-    - name: Create minecraft directory
+    - name: Create SFTP admin user for Minecraft (home only, access restricted to home)
+      when:
+        - mc_admin_user is defined
+        - mc_admin_password is defined
+      user:
+        name: "{{ mc_admin_user }}"
+        shell: /bin/bash
+        create_home: true
+        home: "/home/{{ mc_admin_user }}"
+        password: "{{ mc_admin_password | password_hash('sha512') }}"
+
+    - name: Prepare mcadmin home for SFTP chroot (root must own chroot dir)
+      when: mc_admin_user is defined
+      file:
+        path: "/home/{{ mc_admin_user }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create Minecraft directory (in mcadmin home or /opt/minecraft)
       file:
         path: "{{ mc_dir }}"
         state: directory
@@ -79,17 +102,17 @@
       notify: Restart sshd
       when: mc_admin_user is defined
 
-    - name: Create SFTP admin user for Minecraft
-      when:
-        - mc_admin_user is defined
-        - mc_admin_password is defined
-      user:
-        name: "{{ mc_admin_user }}"
-        shell: /bin/bash
-        create_home: true
-        groups: "{{ mc_user }}"
-        append: true
-        password: "{{ mc_admin_password | password_hash('sha512') }}"
+    - name: Restrict SFTP to mcadmin home only (chroot)
+      when: mc_admin_user is defined
+      blockinfile:
+        path: /etc/ssh/sshd_config
+        marker: "# {mark} ANSIBLE MANAGED - mcadmin chroot"
+        block: |
+          Match User {{ mc_admin_user }}
+            ChrootDirectory /home/{{ mc_admin_user }}
+            ForceCommand internal-sftp
+            AllowTcpForwarding no
+      notify: Restart sshd
 
     - name: Download Minecraft server jar (simplified)
       get_url:

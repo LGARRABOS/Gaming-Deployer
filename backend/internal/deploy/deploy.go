@@ -309,12 +309,19 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 		}
 	}
 
+	mcDir := "/opt/minecraft"
+	mcUser := "minecraft"
+	if u := req.Minecraft.AdminUser; u != "" {
+		mcDir = "/home/" + u + "/minecraft"
+		mcUser = u
+	}
 	result := map[string]any{
 		"vmid": vmid,
 		"ip":   ip,
 		"job":  j.ID,
 		"run":  uuid.NewString(),
-		// Informations SFTP/admin pour gestion via WinSCP ou équivalent.
+		"mc_dir": mcDir,
+		"mc_user": mcUser,
 		"sftp_user":     req.Minecraft.AdminUser,
 		"sftp_password": req.Minecraft.AdminPassword,
 	}

@@ -222,8 +222,13 @@ func (s *Server) handleGetServerConfig(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
+	mcDir, _, err := s.getServerMinecraftPath(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
 	keyPath := sshexec.KeyPath()
-	stdout, stderr, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, "sudo cat /opt/minecraft/server.properties")
+	stdout, stderr, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, "sudo cat "+mcDir+"/server.properties")
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error(), "stderr": stderr})
 		return
@@ -254,18 +259,20 @@ func (s *Server) handleUpdateServerConfig(w http.ResponseWriter, r *http.Request
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	// Get current content and merge
+	mcDir, mcUser, err := s.getServerMinecraftPath(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
 	keyPath := sshexec.KeyPath()
-	current, _, _ := sshexec.RunCommand(ctx, ip, sshUser, keyPath, "sudo cat /opt/minecraft/server.properties")
+	current, _, _ := sshexec.RunCommand(ctx, ip, sshUser, keyPath, "sudo cat "+mcDir+"/server.properties")
 	merged := mergeServerProperties(current, body.Properties)
-	// Write back: pipe content into sudo tee
-	cmd := execCommandWithStdin(ctx, ip, sshUser, keyPath, "sudo tee /opt/minecraft/server.properties > /dev/null", merged)
+	cmd := execCommandWithStdin(ctx, ip, sshUser, keyPath, "sudo tee "+mcDir+"/server.properties > /dev/null", merged)
 	if err := cmd.Run(); err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	// Fix ownership
-	_, _, _ = sshexec.RunCommand(ctx, ip, sshUser, keyPath, "sudo chown minecraft:minecraft /opt/minecraft/server.properties")
+	_, _, _ = sshexec.RunCommand(ctx, ip, sshUser, keyPath, "sudo chown "+mcUser+":"+mcUser+" "+mcDir+"/server.properties")
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -291,6 +298,32 @@ func (s *Server) getServerSSHTarget(ctx context.Context, deploymentID int64) (ip
 		user = "ubuntu"
 	}
 	return ipAddr.String, user, nil
+}
+
+// getServerMinecraftPath returns mc_dir and mc_user from deployment result_json (for server.properties path and ownership).
+func (s *Server) getServerMinecraftPath(ctx context.Context, deploymentID int64) (mcDir, mcUser string, err error) {
+	row := s.DB.Sql().QueryRowContext(ctx, `
+		SELECT result_json FROM deployments
+		WHERE id = ? AND game = ? AND status = ?
+	`, deploymentID, "minecraft", string(deploy.StatusSuccess))
+	var resultJSON sql.NullString
+	if err := row.Scan(&resultJSON); err != nil {
+		return "", "", err
+	}
+	mcDir = "/opt/minecraft"
+	mcUser = "minecraft"
+	if resultJSON.Valid && resultJSON.String != "" {
+		var res map[string]any
+		if json.Unmarshal([]byte(resultJSON.String), &res) == nil {
+			if d, ok := res["mc_dir"].(string); ok && d != "" {
+				mcDir = d
+			}
+			if u, ok := res["mc_user"].(string); ok && u != "" {
+				mcUser = u
+			}
+		}
+	}
+	return mcDir, mcUser, nil
 }
 
 func parseServerProperties(raw string) map[string]string {
