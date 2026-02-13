@@ -323,6 +323,69 @@ func (s *Server) handleServerStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"status": status})
 }
 
+// handleServerMetrics returns CPU load, RAM and disk usage from the VM (for live monitoring).
+func (s *Server) handleServerMetrics(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	ip, sshUser, err := s.getServerSSHTarget(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	keyPath := sshexec.KeyPath()
+	// One SSH: mem (total/used/available), disk root (total/used/avail), loadavg (1m 5m 15m)
+	cmd := `free -b | grep ^Mem; df -B1 / | tail -1; cat /proc/loadavg`
+	stdout, stderr, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, cmd)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error(), "stderr": stderr})
+		return
+	}
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	out := map[string]any{"ok": true}
+	// Mem: total used free shared buff/cache available -> fields 1,2,6 (1-indexed: 2,3,7)
+	if len(lines) >= 1 {
+		fields := strings.Fields(lines[0])
+		if len(fields) >= 7 && fields[0] == "Mem:" {
+			total, _ := strconv.ParseInt(fields[1], 10, 64)
+			used, _ := strconv.ParseInt(fields[2], 10, 64)
+			avail, _ := strconv.ParseInt(fields[6], 10, 64)
+			out["mem_total_bytes"] = total
+			out["mem_used_bytes"] = used
+			out["mem_available_bytes"] = avail
+		}
+	}
+	// df: dev total used avail use% path -> fields 1,2,3
+	if len(lines) >= 2 {
+		fields := strings.Fields(lines[1])
+		if len(fields) >= 4 {
+			total, _ := strconv.ParseInt(fields[1], 10, 64)
+			used, _ := strconv.ParseInt(fields[2], 10, 64)
+			avail, _ := strconv.ParseInt(fields[3], 10, 64)
+			out["disk_total_bytes"] = total
+			out["disk_used_bytes"] = used
+			out["disk_available_bytes"] = avail
+		}
+	}
+	// loadavg: load1 load5 load15 ...
+	if len(lines) >= 3 {
+		fields := strings.Fields(lines[2])
+		if len(fields) >= 3 {
+			load1, _ := strconv.ParseFloat(fields[0], 64)
+			load5, _ := strconv.ParseFloat(fields[1], 64)
+			load15, _ := strconv.ParseFloat(fields[2], 64)
+			out["load_1m"] = load1
+			out["load_5m"] = load5
+			out["load_15m"] = load15
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 // handleGetServerConfig returns the server.properties file content from the VM.
 func (s *Server) handleGetServerConfig(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
