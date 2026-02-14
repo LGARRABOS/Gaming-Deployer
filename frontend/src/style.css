@@ -777,6 +777,15 @@ input[type="checkbox"] {
   background: #991b1b;
 }
 
+.server-btn--secondary {
+  background: #334155;
+  color: #e2e8f0;
+}
+
+.server-btn--secondary:hover:not(:disabled) {
+  background: #475569;
+}
+
 /* SFTP dans le panel */
 .server-backups-actions {
   margin-bottom: 1.25rem;
@@ -878,6 +887,24 @@ input[type="checkbox"] {
 .server-config-actions .success,
 .server-config-actions .error {
   font-size: 0.9rem;
+}
+
+.specs-confirm-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.specs-confirm-message {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #e2e8f0;
+  line-height: 1.45;
+}
+
+.specs-confirm-actions .confirm-actions {
+  margin-top: 0;
 }
 
 /* Métriques serveur (CPU / RAM / disque) */

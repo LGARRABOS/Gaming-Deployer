@@ -36,6 +36,7 @@ export const DeploymentDetailsPage: React.FC = () => {
   const [specs, setSpecs] = useState<{ cores: number; memory_mb: number; disk_gb: number } | null>(null);
   const [specsSaving, setSpecsSaving] = useState(false);
   const [specsMessage, setSpecsMessage] = useState<string | null>(null);
+  const [confirmingSpecs, setConfirmingSpecs] = useState(false);
   const [activeTab, setActiveTab] = useState<"logs" | "ressources">("logs");
   const navigate = useNavigate();
 
@@ -78,10 +79,17 @@ export const DeploymentDetailsPage: React.FC = () => {
     if (deployment?.status === "success") fetchSpecs();
   }, [deployment?.status, fetchSpecs]);
 
-  const onSaveSpecs = async (e: React.FormEvent) => {
+  const onSaveSpecsSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!specs) return;
+    setSpecsMessage(null);
+    setConfirmingSpecs(true);
+  };
+
+  const onConfirmSpecsApply = async () => {
+    if (!specs) return;
     setSpecsSaving(true);
+    setConfirmingSpecs(false);
     setSpecsMessage(null);
     try {
       const res = await apiPost<{ ok: boolean; error?: string; message?: string }>(
@@ -194,7 +202,7 @@ export const DeploymentDetailsPage: React.FC = () => {
               Si vous modifiez le CPU ou la RAM et que la VM est en marche, elle sera <strong>redémarrée automatiquement</strong> pour que les nouveaux paramètres soient pris en compte (cela peut prendre une à deux minutes).
             </p>
             {specs && (
-              <form onSubmit={onSaveSpecs} className="server-config-form">
+              <form onSubmit={onSaveSpecsSubmit} className="server-config-form">
                 <div className="server-config-grid">
                   <label>
                     <span>CPU (cores)</span>
@@ -229,11 +237,37 @@ export const DeploymentDetailsPage: React.FC = () => {
                   </label>
                 </div>
                 <div className="server-config-actions">
-                  <button type="submit" className="server-btn server-btn--primary" disabled={specsSaving}>
-                    {specsSaving ? "Application… (redémarrage VM si nécessaire)" : "Appliquer"}
-                  </button>
+                  {!confirmingSpecs ? (
+                    <button type="submit" className="server-btn server-btn--primary" disabled={specsSaving}>
+                      Appliquer
+                    </button>
+                  ) : (
+                    <div className="specs-confirm-actions">
+                      <p className="specs-confirm-message">
+                        Les changements vont être enregistrés sur Proxmox. Si la VM est en marche, elle sera <strong>redémarrée automatiquement</strong> pour appliquer les nouveaux CPU/RAM (1 à 2 minutes). Confirmer ?
+                      </p>
+                      <div className="confirm-actions">
+                        <button
+                          type="button"
+                          className="server-btn server-btn--secondary"
+                          onClick={() => setConfirmingSpecs(false)}
+                          disabled={specsSaving}
+                        >
+                          Annuler
+                        </button>
+                        <button
+                          type="button"
+                          className="server-btn server-btn--primary"
+                          onClick={onConfirmSpecsApply}
+                          disabled={specsSaving}
+                        >
+                          {specsSaving ? "Application… (redémarrage en cours)" : "Confirmer et appliquer"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   {specsMessage && (
-                    <span className={specsMessage.includes("mises à jour") ? "success" : "error"}>
+                    <span className={specsMessage.includes("mises à jour") || specsMessage.includes("redémarrée") ? "success" : "error"}>
                       {specsMessage}
                     </span>
                   )}
