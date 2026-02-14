@@ -26,11 +26,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	u, hash, err := auth.GetUserByUsername(r.Context(), s.DB, req.Username)
 	if err != nil {
-		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "Identifiants incorrects"})
 		return
 	}
 	if err := auth.VerifyPassword(hash, req.Password); err != nil {
-		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "Identifiants incorrects"})
 		return
 	}
 	sess, err := auth.CreateSession(r.Context(), s.DB, u.ID, 24*time.Hour)

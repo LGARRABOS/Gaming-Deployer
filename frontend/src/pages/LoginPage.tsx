@@ -17,7 +17,8 @@ export const LoginPage: React.FC = () => {
       await apiPost("/api/login", { username, password });
       navigate("/deployments");
     } catch (e: unknown) {
-      setError((e as Error).message ?? "Erreur d'authentification");
+      const msg = (e as Error).message ?? "Erreur d'authentification";
+      setError(msg.includes("401") || msg === "Unauthorized" ? "Identifiants incorrects." : msg);
     } finally {
       setLoading(false);
     }
