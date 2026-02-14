@@ -84,13 +84,13 @@ export const DeploymentDetailsPage: React.FC = () => {
     setSpecsSaving(true);
     setSpecsMessage(null);
     try {
-      const res = await apiPost<{ ok: boolean; error?: string }>(
+      const res = await apiPost<{ ok: boolean; error?: string; message?: string }>(
         `/api/servers/${deploymentId}/specs`,
         { cores: specs.cores, memory_mb: specs.memory_mb, disk_gb: specs.disk_gb },
         "PUT"
       );
       if (res?.ok) {
-        setSpecsMessage("Ressources mises à jour.");
+        setSpecsMessage(res?.message ?? "Ressources mises à jour.");
         fetchSpecs();
       } else {
         setSpecsMessage(res?.error ?? "Erreur");
@@ -190,6 +190,9 @@ export const DeploymentDetailsPage: React.FC = () => {
             <p className="page-panel-desc">
               Modifier le CPU, la RAM et le disque de la VM. Les changements sont appliqués sur Proxmox. Proxmox ne permet pas de réduire la taille du disque (agrandissement uniquement).
             </p>
+            <p className="page-panel-notice">
+              Si vous modifiez le CPU ou la RAM et que la VM est en marche, elle sera <strong>redémarrée automatiquement</strong> pour que les nouveaux paramètres soient pris en compte (cela peut prendre une à deux minutes).
+            </p>
             {specs && (
               <form onSubmit={onSaveSpecs} className="server-config-form">
                 <div className="server-config-grid">
@@ -227,7 +230,7 @@ export const DeploymentDetailsPage: React.FC = () => {
                 </div>
                 <div className="server-config-actions">
                   <button type="submit" className="server-btn server-btn--primary" disabled={specsSaving}>
-                    {specsSaving ? "Enregistrement…" : "Appliquer"}
+                    {specsSaving ? "Application… (redémarrage VM si nécessaire)" : "Appliquer"}
                   </button>
                   {specsMessage && (
                     <span className={specsMessage.includes("mises à jour") ? "success" : "error"}>

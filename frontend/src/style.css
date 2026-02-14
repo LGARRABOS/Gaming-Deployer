@@ -1136,6 +1136,21 @@ input[type="checkbox"] {
   border-radius: 0.25rem;
 }
 
+.page-panel-notice {
+  margin: 0 0 1rem;
+  padding: 0.65rem 0.9rem;
+  font-size: 0.85rem;
+  color: #e2e8f0;
+  line-height: 1.45;
+  background: rgba(14, 165, 233, 0.12);
+  border: 1px solid rgba(14, 165, 233, 0.35);
+  border-radius: 0.5rem;
+}
+
+.page-panel-notice strong {
+  color: #7dd3fc;
+}
+
 .page-panel--error {
   border-color: rgba(248, 113, 113, 0.3);
   background: rgba(127, 29, 29, 0.08);

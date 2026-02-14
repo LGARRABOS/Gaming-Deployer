@@ -635,6 +635,8 @@ func (s *Server) handleUpdateServerSpecs(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	cpuOrRamChanged := body.Cores != req.Cores || body.MemoryMB != req.MemoryMB
+
 	if err := client.UpdateVMConfig(ctx, node, int(vmid), body.Cores, body.MemoryMB); err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "Proxmox config: " + err.Error()})
 		return
@@ -656,12 +658,55 @@ func (s *Server) handleUpdateServerSpecs(w http.ResponseWriter, r *http.Request)
 			}
 		}
 	}
+
+	// Les changements de CPU/RAM ne sont pris en compte qu'après redémarrage de la VM.
+	// Si la VM tourne, on l'arrête puis on la redémarre.
+	var vmRestarted bool
+	if cpuOrRamChanged {
+		cur, errStatus := client.GetVMStatusCurrent(ctx, node, int(vmid))
+		if errStatus == nil && cur != nil && cur.Status == "running" {
+			upidStop, errStop := client.StopVM(ctx, node, int(vmid))
+			if errStop != nil {
+				writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "Arrêt de la VM pour appliquer CPU/RAM: " + errStop.Error()})
+				return
+			}
+			if upidStop != "" {
+				if err := client.WaitForTask(ctx, node, upidStop, 5*time.Minute); err != nil {
+					writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "Attente arrêt VM: " + err.Error()})
+					return
+				}
+			}
+			upidStart, errStart := client.StartVM(ctx, node, int(vmid))
+			if errStart != nil {
+				writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "Redémarrage de la VM: " + errStart.Error()})
+				return
+			}
+			if upidStart != "" {
+				if err := client.WaitForTask(ctx, node, upidStart, 3*time.Minute); err != nil {
+					writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "Attente démarrage VM: " + err.Error()})
+					return
+				}
+			}
+			vmRestarted = true
+		}
+	}
+
 	req.Cores = body.Cores
 	req.MemoryMB = body.MemoryMB
 	req.DiskGB = body.DiskGB
 	rawReq, _ := json.Marshal(req)
 	_, _ = s.DB.Sql().ExecContext(ctx, `UPDATE deployments SET request_json = ?, updated_at = ? WHERE id = ?`, string(rawReq), time.Now().UTC(), deploymentID)
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+
+	resp := map[string]any{"ok": true}
+	if vmRestarted {
+		resp["vm_restarted"] = true
+		resp["message"] = "Ressources mises à jour. La VM a été redémarrée pour appliquer les nouveaux CPU et RAM."
+	} else if cpuOrRamChanged {
+		resp["message"] = "Ressources mises à jour. La VM était arrêtée ; les nouveaux CPU/RAM seront appliqués au prochain démarrage."
+	} else {
+		resp["message"] = "Ressources mises à jour."
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // handleListBackups lists backup files in mc_dir/backups/ on the VM.

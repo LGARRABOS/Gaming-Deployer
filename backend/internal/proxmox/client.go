@@ -239,11 +239,12 @@ func (c *Client) DeleteVM(ctx context.Context, node string, vmid int) (string, e
 
 // VMStatusCurrent holds the current VM resource usage from status/current.
 type VMStatusCurrent struct {
-	CPU    float64 `json:"cpu"`     // 0..1 (fraction of CPU) or percentage
-	Mem    int64   `json:"mem"`     // used memory in bytes
-	MaxMem int64   `json:"maxmem"`  // max memory in bytes
-	Disk   int64   `json:"disk"`    // used disk in bytes (often 0 if no guest agent)
-	MaxDisk int64  `json:"maxdisk"` // max disk in bytes
+	Status  string  `json:"status"`   // "running", "stopped", "paused"
+	CPU     float64 `json:"cpu"`      // 0..1 (fraction of CPU) or percentage
+	Mem     int64   `json:"mem"`      // used memory in bytes
+	MaxMem  int64   `json:"maxmem"`   // max memory in bytes
+	Disk    int64   `json:"disk"`     // used disk in bytes (often 0 if no guest agent)
+	MaxDisk int64   `json:"maxdisk"`  // max disk in bytes
 }
 
 // GetVMStatusCurrent returns current CPU, memory and disk usage for a VM (same as Proxmox UI).
