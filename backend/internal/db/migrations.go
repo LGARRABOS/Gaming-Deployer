@@ -65,6 +65,19 @@ func (d *DB) Migrate(ctx context.Context) error {
 			updated_at DATETIME NOT NULL,
 			FOREIGN KEY(deployment_id) REFERENCES deployments(id) ON DELETE SET NULL
 		);`,
+		// monitoring_samples: 1 point/min per server, 12h retention (collector runs on server)
+		`CREATE TABLE IF NOT EXISTS monitoring_samples (
+			deployment_id INTEGER NOT NULL,
+			ts INTEGER NOT NULL,
+			cpu REAL NOT NULL,
+			ram_pct REAL NOT NULL,
+			disk_pct REAL NOT NULL,
+			tps REAL,
+			players INTEGER,
+			PRIMARY KEY (deployment_id, ts),
+			FOREIGN KEY(deployment_id) REFERENCES deployments(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_monitoring_samples_deployment_ts ON monitoring_samples(deployment_id, ts);`,
 	}
 
 	for i, stmt := range stmts {

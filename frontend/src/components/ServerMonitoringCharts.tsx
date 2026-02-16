@@ -35,8 +35,8 @@ export const ServerMonitoringCharts: React.FC<Props> = ({ data, loading }) => {
     <section className="card server-panel server-panel--wide server-monitoring-panel">
       <h2 className="server-panel-title">Monitoring en direct</h2>
       <p className="server-panel-desc">
-        Un point par minute. Données sur les 12 dernières heures. La collecte démarre dès l’ouverture du dashboard
-        serveur.
+        Un point par minute, données sur les 12 dernières heures. La collecte s’effectue en arrière-plan sur le
+        serveur (même si l’app n’est pas ouverte).
       </p>
       {loading && data.length === 0 ? (
         <p className="server-panel-desc">Chargement des premières données…</p>

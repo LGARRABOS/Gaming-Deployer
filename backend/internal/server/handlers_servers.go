@@ -463,6 +463,55 @@ func (s *Server) handleServerMetrics(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// handleMonitoringHistory returns the last 12h of monitoring samples (collected server-side in background).
+func (s *Server) handleMonitoringHistory(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	rows, err := s.DB.Sql().QueryContext(ctx, `
+		SELECT ts, cpu, ram_pct, disk_pct, tps, players FROM monitoring_samples
+		WHERE deployment_id = ? ORDER BY ts ASC LIMIT 720
+	`, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	type point struct {
+		Time    string   `json:"time"`
+		CPU     float64  `json:"cpu"`
+		RamPct  float64  `json:"ramPct"`
+		DiskPct float64  `json:"diskPct"`
+		TPS     *float64 `json:"tps,omitempty"`
+		Players *int     `json:"players,omitempty"`
+	}
+	var points []point
+	for rows.Next() {
+		var ts int64
+		var cpu, ramPct, diskPct float64
+		var tpsNull sql.NullFloat64
+		var playersNull sql.NullInt64
+		if err := rows.Scan(&ts, &cpu, &ramPct, &diskPct, &tpsNull, &playersNull); err != nil {
+			continue
+		}
+		t := time.Unix(ts, 0)
+		pt := point{Time: t.Format("15:04:05"), CPU: cpu, RamPct: ramPct, DiskPct: diskPct}
+		if tpsNull.Valid {
+			pt.TPS = &tpsNull.Float64
+		}
+		if playersNull.Valid {
+			n := int(playersNull.Int64)
+			pt.Players = &n
+		}
+		points = append(points, pt)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"points": points})
+}
+
 // handleGetServerConfig returns the server.properties file content from the VM.
 func (s *Server) handleGetServerConfig(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")

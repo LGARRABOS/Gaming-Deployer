@@ -36,6 +36,7 @@ func New(ctx context.Context, dbPath string) (*Server, error) {
 	}
 
 	s := &Server{DB: database}
+	go s.RunMonitoringCollector()
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -82,6 +83,7 @@ func New(ctx context.Context, dbPath string) (*Server, error) {
 			r.Get("/servers/{id}/status", s.handleServerStatus)
 			r.Get("/servers/{id}/minecraft-info", s.handleMinecraftInfo)
 			r.Get("/servers/{id}/metrics", s.handleServerMetrics)
+			r.Get("/servers/{id}/monitoring-history", s.handleMonitoringHistory)
 			r.Get("/servers/{id}/config", s.handleGetServerConfig)
 			r.Put("/servers/{id}/config", s.handleUpdateServerConfig)
 			r.Get("/servers/{id}/specs", s.handleGetServerSpecs)
