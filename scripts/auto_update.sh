@@ -16,7 +16,7 @@ LOG_FILE="/var/log/proxmox-game-deployer-update.log"
 
   echo "[frontend] building..."
   cd frontend
-  npm install --omit=dev=false
+  npm install
   npm run build
   cd ..
 
