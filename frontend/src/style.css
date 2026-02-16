@@ -831,6 +831,69 @@ input[type="checkbox"] {
   color: #38bdf8;
 }
 
+.server-players-tps {
+  font-size: 0.9rem;
+  color: #94a3b8;
+  margin: 0 0 0.75rem 0;
+}
+
+.server-players-box {
+  border: 1px solid #1e293b;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.6);
+  margin-top: 1rem;
+}
+
+.server-players-box-title {
+  margin: 0 0 0.75rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.server-players-list--actions {
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.server-players-list-item--row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(30, 41, 59, 0.5);
+  border-radius: 0.4rem;
+}
+
+.server-players-pseudo {
+  font-weight: 500;
+  color: #e2e8f0;
+}
+
+.server-players-item-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.server-btn--small {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+.server-config-grid select {
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.4rem;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 0.9rem;
+  min-width: 120px;
+}
+
 .server-players-list {
   list-style: none;
   padding: 0;

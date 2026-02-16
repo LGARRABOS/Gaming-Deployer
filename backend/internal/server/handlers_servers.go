@@ -328,8 +328,9 @@ func (s *Server) handleServerStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"status": status})
 }
 
-// handleMinecraftInfo returns in-game server info via RCON (player count and list).
+// handleMinecraftInfo returns in-game server info via RCON (players, optional TPS). When server is off returns 0/0 without error.
 func (s *Server) handleMinecraftInfo(w http.ResponseWriter, r *http.Request) {
+	out := map[string]any{"ok": true, "online": 0, "max": 0, "players": []string{}}
 	idStr := chi.URLParam(r, "id")
 	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -344,24 +345,23 @@ func (s *Server) handleMinecraftInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	port, password, err := s.getServerRCONConfig(ctx, deploymentID)
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "RCON non configuré", "online": 0, "max": 0, "players": []string{}})
+		writeJSON(w, http.StatusOK, out)
 		return
 	}
 	addr := fmt.Sprintf("%s:%d", ip, port)
 	client, err := rcon.Dial(addr, password)
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error(), "online": 0, "max": 0, "players": []string{}})
+		writeJSON(w, http.StatusOK, out)
 		return
 	}
 	defer client.Close()
 
 	resp, err := client.Execute("list")
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error(), "online": 0, "max": 0, "players": []string{}})
+		writeJSON(w, http.StatusOK, out)
 		return
 	}
 	// Minecraft "list" returns e.g. "There are 2 of a max of 20 players online: Steve, Alex"
-	// or "There are 0 of a max of 20 players online:"
 	re := regexp.MustCompile(`(?i)there are (\d+) of a max of (\d+) players online:\s*(.*)`)
 	matches := re.FindStringSubmatch(strings.TrimSpace(resp))
 	online, maxPlayers := 0, 0
@@ -378,9 +378,22 @@ func (s *Server) handleMinecraftInfo(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"ok": true, "online": online, "max": maxPlayers, "players": players,
-	})
+	out["online"] = online
+	out["max"] = maxPlayers
+	out["players"] = players
+
+	// TPS (Paper/Spigot): "TPS from last 1m, 5m, 15m: 20.0, 20.0, 20.0" — optional, ignore if not supported
+	if tpsResp, tpsErr := client.Execute("tps"); tpsErr == nil {
+		tpsRe := regexp.MustCompile(`\d+\.?\d*`)
+		tpsNums := tpsRe.FindAllString(tpsResp, -1)
+		if len(tpsNums) >= 3 {
+			out["tps"] = map[string]string{"1m": tpsNums[len(tpsNums)-3], "5m": tpsNums[len(tpsNums)-2], "15m": tpsNums[len(tpsNums)-1]}
+		} else if len(tpsNums) >= 1 {
+			out["tps"] = map[string]string{"current": tpsNums[len(tpsNums)-1]}
+		}
+	}
+
+	writeJSON(w, http.StatusOK, out)
 }
 
 // handleServerMetrics returns CPU, RAM and disk from the Proxmox API (same values as the Proxmox UI).

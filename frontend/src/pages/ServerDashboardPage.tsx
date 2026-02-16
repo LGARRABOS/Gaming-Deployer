@@ -37,9 +37,15 @@ export const ServerDashboardPage: React.FC = () => {
   const [backupCreating, setBackupCreating] = useState(false);
   const [backupDeleting, setBackupDeleting] = useState<string | null>(null);
   const [backupError, setBackupError] = useState<string | null>(null);
-  const [minecraftInfo, setMinecraftInfo] = useState<{ online: number; max: number; players: string[] } | null>(null);
-  const [minecraftInfoError, setMinecraftInfoError] = useState<string | null>(null);
+  const [minecraftInfo, setMinecraftInfo] = useState<{
+    online: number;
+    max: number;
+    players: string[];
+    tps?: { "1m"?: string; "5m"?: string; "15m"?: string; current?: string };
+  } | null>(null);
   const [minecraftInfoLoading, setMinecraftInfoLoading] = useState(false);
+  const [playerActionLoading, setPlayerActionLoading] = useState<string | null>(null);
+  const [playerActionMessage, setPlayerActionMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
 
   const copyToClipboard = useCallback((text: string, label: string) => {
     navigator.clipboard.writeText(text).then(
@@ -114,24 +120,26 @@ export const ServerDashboardPage: React.FC = () => {
   const fetchMinecraftInfo = useCallback(async () => {
     if (!serverId) return;
     setMinecraftInfoLoading(true);
-    setMinecraftInfoError(null);
     try {
-      const res = await apiGet<{ ok: boolean; online?: number; max?: number; players?: string[]; error?: string }>(
-        `/api/servers/${serverId}/minecraft-info`
-      );
+      const res = await apiGet<{
+        ok: boolean;
+        online?: number;
+        max?: number;
+        players?: string[];
+        tps?: { "1m"?: string; "5m"?: string; "15m"?: string; current?: string };
+      }>(`/api/servers/${serverId}/minecraft-info`);
       if (res?.ok && res.online !== undefined) {
         setMinecraftInfo({
           online: res.online,
           max: res.max ?? 0,
           players: res.players ?? [],
+          tps: res.tps,
         });
       } else {
-        setMinecraftInfo({ online: 0, max: 0, players: [] });
-        if (res?.error) setMinecraftInfoError(res.error);
+        setMinecraftInfo({ online: 0, max: 0, players: [], tps: undefined });
       }
-    } catch (e: unknown) {
-      setMinecraftInfo(null);
-      setMinecraftInfoError((e as Error).message ?? "Impossible de récupérer les infos");
+    } catch {
+      setMinecraftInfo({ online: 0, max: 0, players: [], tps: undefined });
     } finally {
       setMinecraftInfoLoading(false);
     }
@@ -144,6 +152,31 @@ export const ServerDashboardPage: React.FC = () => {
       return () => clearInterval(t);
     }
   }, [activeTab, serverId, fetchMinecraftInfo]);
+
+  const onPlayerCommand = useCallback(
+    async (command: string, playerName: string, confirmMessage?: string) => {
+      if (confirmMessage && !window.confirm(confirmMessage)) return;
+      setPlayerActionLoading(playerName);
+      setPlayerActionMessage(null);
+      try {
+        const res = await apiPost<{ ok: boolean; error?: string; response?: string }>(
+          `/api/servers/${serverId}/console/command`,
+          { command }
+        );
+        if (res?.ok) {
+          setPlayerActionMessage({ type: "ok", text: "Commande exécutée." });
+          fetchMinecraftInfo();
+        } else {
+          setPlayerActionMessage({ type: "error", text: res?.error ?? res?.response ?? "Erreur" });
+        }
+      } catch (e: unknown) {
+        setPlayerActionMessage({ type: "error", text: (e as Error).message ?? "Erreur" });
+      } finally {
+        setPlayerActionLoading(null);
+      }
+    },
+    [serverId, fetchMinecraftInfo]
+  );
 
   const onAction = async (action: "start" | "stop" | "restart") => {
     setActionLoading(action);
@@ -362,13 +395,31 @@ export const ServerDashboardPage: React.FC = () => {
                 </label>
                 <label>
                   <span>Difficulté</span>
-                  <input
+                  <select
                     value={configProps["difficulty"] ?? ""}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, difficulty: e.target.value }))
                     }
-                    placeholder="peaceful, easy, normal, hard"
-                  />
+                  >
+                    <option value="">—</option>
+                    <option value="peaceful">Peaceful</option>
+                    <option value="easy">Easy</option>
+                    <option value="normal">Normal</option>
+                    <option value="hard">Hard</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Liste blanche (whitelist)</span>
+                  <select
+                    value={configProps["white-list"] ?? ""}
+                    onChange={(e) =>
+                      setConfigProps((p) => ({ ...p, "white-list": e.target.value }))
+                    }
+                  >
+                    <option value="">—</option>
+                    <option value="true">Activée</option>
+                    <option value="false">Désactivée</option>
+                  </select>
                 </label>
               </div>
               <div className="server-config-actions">
@@ -385,44 +436,104 @@ export const ServerDashboardPage: React.FC = () => {
           </section>
         )}
 
-        {activeTab === "players" && (
-          <section className="card server-panel server-panel--wide">
-            <h2 className="server-panel-title">Joueurs connectés</h2>
-            <p className="server-panel-desc">
-              Nombre de joueurs et liste des pseudos en jeu, mis à jour automatiquement via le serveur Minecraft (RCON).
-            </p>
-            <div className="server-players-actions">
-              <button
-                type="button"
-                className="server-btn server-btn--primary"
-                onClick={fetchMinecraftInfo}
-                disabled={minecraftInfoLoading}
-              >
-                {minecraftInfoLoading ? "Actualisation…" : "Actualiser"}
-              </button>
-            </div>
-            {minecraftInfoError && <p className="error server-panel-error">{minecraftInfoError}</p>}
-            {!minecraftInfoLoading && minecraftInfo && (
+        {activeTab === "players" && (() => {
+          const info = minecraftInfo ?? { online: 0, max: 0, players: [] as string[], tps: undefined };
+          return (
+            <section className="card server-panel server-panel--wide">
+              <h2 className="server-panel-title">Joueurs connectés</h2>
+              <p className="server-panel-desc">
+                Nombre de joueurs et liste des pseudos en jeu, mis à jour via le serveur Minecraft (RCON). Si le serveur est éteint, 0/0 s’affiche.
+              </p>
+              <div className="server-players-actions">
+                <button
+                  type="button"
+                  className="server-btn server-btn--primary"
+                  onClick={fetchMinecraftInfo}
+                  disabled={minecraftInfoLoading}
+                >
+                  {minecraftInfoLoading ? "Actualisation…" : "Actualiser"}
+                </button>
+              </div>
               <div className="server-players-stats">
                 <p className="server-players-count">
-                  <strong>{minecraftInfo.online}</strong> joueur{minecraftInfo.online !== 1 ? "s" : ""} connecté{minecraftInfo.online !== 1 ? "s" : ""}
-                  {minecraftInfo.max > 0 && (
-                    <> (max. {minecraftInfo.max})</>
-                  )}
+                  <strong>{info.online}</strong> / <strong>{info.max}</strong> joueur{info.online !== 1 ? "s" : ""} connecté{info.online !== 1 ? "s" : ""}
                 </p>
-                {minecraftInfo.players.length > 0 ? (
-                  <ul className="server-players-list">
-                    {minecraftInfo.players.map((name) => (
-                      <li key={name} className="server-players-list-item">{name}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="server-panel-desc">Aucun joueur connecté.</p>
+                {info.tps && (info.tps["1m"] != null || info.tps["5m"] != null || info.tps["15m"] != null) && (
+                  <p className="server-players-tps">
+                    TPS (1m, 5m, 15m) : {[info.tps["1m"], info.tps["5m"], info.tps["15m"]].filter(Boolean).join(", ") || "—"}
+                  </p>
+                )}
+                {info.tps?.current != null && info.tps["1m"] == null && (
+                  <p className="server-players-tps">TPS : {info.tps.current}</p>
+                )}
+                <div className="server-players-box">
+                  <h3 className="server-players-box-title">Joueurs en ligne</h3>
+                  {info.players.length > 0 ? (
+                    <ul className="server-players-list server-players-list--actions">
+                      {info.players.map((name) => (
+                        <li key={name} className="server-players-list-item server-players-list-item--row">
+                          <span className="server-players-pseudo">{name}</span>
+                          <div className="server-players-item-actions">
+                            <button
+                              type="button"
+                              className="server-btn server-btn--small"
+                              onClick={() => onPlayerCommand(`op ${name}`, name)}
+                              disabled={playerActionLoading !== null}
+                              title="Passer opérateur"
+                            >
+                              Op
+                            </button>
+                            <button
+                              type="button"
+                              className="server-btn server-btn--small"
+                              onClick={() => onPlayerCommand(`whitelist add ${name}`, name)}
+                              disabled={playerActionLoading !== null}
+                              title="Ajouter à la whitelist"
+                            >
+                              Whitelist
+                            </button>
+                            <button
+                              type="button"
+                              className="server-btn server-btn--small server-btn--danger"
+                              onClick={() => {
+                                const reason = window.prompt("Raison du kick (optionnel)");
+                                onPlayerCommand(reason ? `kick ${name} ${reason}` : `kick ${name}`, name);
+                              }}
+                              disabled={playerActionLoading !== null}
+                              title="Expulser"
+                            >
+                              Kick
+                            </button>
+                            <button
+                              type="button"
+                              className="server-btn server-btn--small server-btn--danger"
+                              onClick={() => {
+                                if (!window.confirm(`Bannir ${name} ?`)) return;
+                                const reason = window.prompt("Raison du bannissement (optionnel)");
+                                onPlayerCommand(reason ? `ban ${name} ${reason}` : `ban ${name}`, name);
+                              }}
+                              disabled={playerActionLoading !== null}
+                              title="Bannir"
+                            >
+                              Ban
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="server-panel-desc">Aucun joueur connecté.</p>
+                  )}
+                </div>
+                {playerActionMessage && (
+                  <p className={playerActionMessage.type === "ok" ? "success server-panel-error" : "error server-panel-error"}>
+                    {playerActionMessage.text}
+                  </p>
                 )}
               </div>
-            )}
-          </section>
-        )}
+            </section>
+          );
+        })()}
 
         {activeTab === "backups" && (
           <section className="card server-panel server-panel--wide">
