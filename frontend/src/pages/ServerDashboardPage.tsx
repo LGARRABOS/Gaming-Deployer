@@ -356,42 +356,139 @@ export const ServerDashboardPage: React.FC = () => {
         {activeTab === "config" && (
           <section className="card server-panel server-panel--wide">
             <h2 className="server-panel-title">Configuration (server.properties)</h2>
+            <p className="server-panel-desc">
+              Modifiez les paramètres du serveur Minecraft. Pensez à redémarrer le serveur pour que certaines options prennent effet.
+            </p>
             <form onSubmit={onSaveConfig} className="server-config-form">
+              <h3 className="server-config-section">Réseau et général</h3>
               <div className="server-config-grid">
                 <label>
-                  <span>MOTD</span>
+                  <span>Port du serveur</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={65535}
+                    value={configProps["server-port"] ?? ""}
+                    onChange={(e) => setConfigProps((p) => ({ ...p, "server-port": e.target.value }))}
+                    placeholder="25565"
+                  />
+                </label>
+                <label>
+                  <span>MOTD (message d’accueil)</span>
                   <input
                     value={configProps["motd"] ?? ""}
                     onChange={(e) => setConfigProps((p) => ({ ...p, motd: e.target.value }))}
+                    placeholder="A Minecraft Server"
                   />
                 </label>
                 <label>
                   <span>Nombre max de joueurs</span>
                   <input
                     type="number"
+                    min={1}
                     value={configProps["max-players"] ?? ""}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "max-players": e.target.value }))
                     }
+                    placeholder="20"
                   />
                 </label>
                 <label>
-                  <span>Mode en ligne</span>
+                  <span>Nom du monde</span>
                   <input
+                    value={configProps["level-name"] ?? ""}
+                    onChange={(e) =>
+                      setConfigProps((p) => ({ ...p, "level-name": e.target.value }))
+                    }
+                    placeholder="world"
+                  />
+                </label>
+                <label>
+                  <span>Seed du monde</span>
+                  <input
+                    value={configProps["level-seed"] ?? ""}
+                    onChange={(e) =>
+                      setConfigProps((p) => ({ ...p, "level-seed": e.target.value }))
+                    }
+                    placeholder="optionnel"
+                  />
+                </label>
+                <label>
+                  <span>Type de monde</span>
+                  <select
+                    value={configProps["level-type"] ?? ""}
+                    onChange={(e) =>
+                      setConfigProps((p) => ({ ...p, "level-type": e.target.value }))
+                    }
+                  >
+                    <option value="">—</option>
+                    <option value="default">Default</option>
+                    <option value="flat">Flat</option>
+                    <option value="largeBiomes">Large Biomes</option>
+                    <option value="amplified">Amplified</option>
+                  </select>
+                </label>
+              </div>
+
+              <h3 className="server-config-section">Connexion et sécurité</h3>
+              <div className="server-config-grid">
+                <label>
+                  <span>Mode en ligne (authentification Mojang)</span>
+                  <select
                     value={configProps["online-mode"] ?? ""}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "online-mode": e.target.value }))
                     }
-                    placeholder="true / false"
-                  />
+                  >
+                    <option value="">—</option>
+                    <option value="true">Oui</option>
+                    <option value="false">Non (cracked)</option>
+                  </select>
                 </label>
                 <label>
-                  <span>PVP</span>
-                  <input
-                    value={configProps["pvp"] ?? ""}
-                    onChange={(e) => setConfigProps((p) => ({ ...p, pvp: e.target.value }))}
-                    placeholder="true / false"
-                  />
+                  <span>Liste blanche (whitelist)</span>
+                  <select
+                    value={configProps["white-list"] ?? ""}
+                    onChange={(e) =>
+                      setConfigProps((p) => ({ ...p, "white-list": e.target.value }))
+                    }
+                  >
+                    <option value="">—</option>
+                    <option value="true">Activée</option>
+                    <option value="false">Désactivée</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Exclure les non-whitelist (enforce-whitelist)</span>
+                  <select
+                    value={configProps["enforce-whitelist"] ?? ""}
+                    onChange={(e) =>
+                      setConfigProps((p) => ({ ...p, "enforce-whitelist": e.target.value }))
+                    }
+                  >
+                    <option value="">—</option>
+                    <option value="true">Oui</option>
+                    <option value="false">Non</option>
+                  </select>
+                </label>
+              </div>
+
+              <h3 className="server-config-section">Règles de jeu</h3>
+              <div className="server-config-grid">
+                <label>
+                  <span>Mode de jeu par défaut</span>
+                  <select
+                    value={configProps["gamemode"] ?? ""}
+                    onChange={(e) =>
+                      setConfigProps((p) => ({ ...p, gamemode: e.target.value }))
+                    }
+                  >
+                    <option value="">—</option>
+                    <option value="survival">Survival</option>
+                    <option value="creative">Creative</option>
+                    <option value="adventure">Adventure</option>
+                    <option value="spectator">Spectator</option>
+                  </select>
                 </label>
                 <label>
                   <span>Difficulté</span>
@@ -409,19 +506,181 @@ export const ServerDashboardPage: React.FC = () => {
                   </select>
                 </label>
                 <label>
-                  <span>Liste blanche (whitelist)</span>
+                  <span>PVP</span>
                   <select
-                    value={configProps["white-list"] ?? ""}
+                    value={configProps["pvp"] ?? ""}
+                    onChange={(e) => setConfigProps((p) => ({ ...p, pvp: e.target.value }))}
+                  >
+                    <option value="">—</option>
+                    <option value="true">Activé</option>
+                    <option value="false">Désactivé</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Mode hardcore</span>
+                  <select
+                    value={configProps["hardcore"] ?? ""}
                     onChange={(e) =>
-                      setConfigProps((p) => ({ ...p, "white-list": e.target.value }))
+                      setConfigProps((p) => ({ ...p, hardcore: e.target.value }))
                     }
                   >
                     <option value="">—</option>
-                    <option value="true">Activée</option>
-                    <option value="false">Désactivée</option>
+                    <option value="true">Oui</option>
+                    <option value="false">Non</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Vol autorisé (allow-flight)</span>
+                  <select
+                    value={configProps["allow-flight"] ?? ""}
+                    onChange={(e) =>
+                      setConfigProps((p) => ({ ...p, "allow-flight": e.target.value }))
+                    }
+                  >
+                    <option value="">—</option>
+                    <option value="true">Oui</option>
+                    <option value="false">Non</option>
                   </select>
                 </label>
               </div>
+
+              <h3 className="server-config-section">Monde et performances</h3>
+              <div className="server-config-grid">
+                <label>
+                  <span>Distance de vue (chunks)</span>
+                  <input
+                    type="number"
+                    min={2}
+                    max={32}
+                    value={configProps["view-distance"] ?? ""}
+                    onChange={(e) =>
+                      setConfigProps((p) => ({ ...p, "view-distance": e.target.value }))
+                    }
+                    placeholder="10"
+                  />
+                </label>
+                <label>
+                  <span>Distance de simulation (chunks)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={32}
+                    value={configProps["simulation-distance"] ?? ""}
+                    onChange={(e) =>
+                      setConfigProps((p) => ({ ...p, "simulation-distance": e.target.value }))
+                    }
+                    placeholder="10"
+                  />
+                </label>
+                <label>
+                  <span>Protection du spawn (rayon, 0 = désactivé)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={256}
+                    value={configProps["spawn-protection"] ?? ""}
+                    onChange={(e) =>
+                      setConfigProps((p) => ({ ...p, "spawn-protection": e.target.value }))
+                    }
+                    placeholder="16"
+                  />
+                </label>
+                <label>
+                  <span>Nether autorisé</span>
+                  <select
+                    value={configProps["allow-nether"] ?? ""}
+                    onChange={(e) =>
+                      setConfigProps((p) => ({ ...p, "allow-nether": e.target.value }))
+                    }
+                  >
+                    <option value="">—</option>
+                    <option value="true">Oui</option>
+                    <option value="false">Non</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Apparition des monstres</span>
+                  <select
+                    value={configProps["spawn-monsters"] ?? ""}
+                    onChange={(e) =>
+                      setConfigProps((p) => ({ ...p, "spawn-monsters": e.target.value }))
+                    }
+                  >
+                    <option value="">—</option>
+                    <option value="true">Oui</option>
+                    <option value="false">Non</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Apparition des animaux</span>
+                  <select
+                    value={configProps["spawn-animals"] ?? ""}
+                    onChange={(e) =>
+                      setConfigProps((p) => ({ ...p, "spawn-animals": e.target.value }))
+                    }
+                  >
+                    <option value="">—</option>
+                    <option value="true">Oui</option>
+                    <option value="false">Non</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Génération des structures</span>
+                  <select
+                    value={configProps["generate-structures"] ?? ""}
+                    onChange={(e) =>
+                      setConfigProps((p) => ({ ...p, "generate-structures": e.target.value }))
+                    }
+                  >
+                    <option value="">—</option>
+                    <option value="true">Oui</option>
+                    <option value="false">Non</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Taille max monde (bordure)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={29999984}
+                    value={configProps["max-world-size"] ?? ""}
+                    onChange={(e) =>
+                      setConfigProps((p) => ({ ...p, "max-world-size": e.target.value }))
+                    }
+                    placeholder="29999984"
+                  />
+                </label>
+              </div>
+
+              <h3 className="server-config-section">Admin et technique</h3>
+              <div className="server-config-grid">
+                <label>
+                  <span>Bloc de commande (command blocks)</span>
+                  <select
+                    value={configProps["enable-command-block"] ?? ""}
+                    onChange={(e) =>
+                      setConfigProps((p) => ({ ...p, "enable-command-block": e.target.value }))
+                    }
+                  >
+                    <option value="">—</option>
+                    <option value="true">Activé</option>
+                    <option value="false">Désactivé</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Max tick time (ms, -1 = désactiver watchdog)</span>
+                  <input
+                    type="number"
+                    min={-1}
+                    value={configProps["max-tick-time"] ?? ""}
+                    onChange={(e) =>
+                      setConfigProps((p) => ({ ...p, "max-tick-time": e.target.value }))
+                    }
+                    placeholder="60000"
+                  />
+                </label>
+              </div>
+
               <div className="server-config-actions">
                 <button type="submit" className="server-btn server-btn--primary" disabled={configSaving}>
                   {configSaving ? "Enregistrement…" : "Enregistrer"}

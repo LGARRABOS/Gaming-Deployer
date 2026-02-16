@@ -1115,6 +1115,19 @@ input[type="checkbox"] {
   margin-top: 0.5rem;
 }
 
+.server-config-section {
+  margin: 1.25rem 0 0.5rem 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #94a3b8;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid #1e293b;
+}
+
+.server-config-section:first-of-type {
+  margin-top: 0;
+}
+
 .server-config-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
