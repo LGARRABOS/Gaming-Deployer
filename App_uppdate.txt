@@ -1,5 +1,3 @@
-Ajoutez un pannel intégrés d'accés sftp depuis l'app
-Monitoring avancer du serveur avec par exemple le nombre de joueurs
 Page dédier au monitoring avec des graphique
 Onglet journalisation des action faite du serveur MC
 Couleurs console

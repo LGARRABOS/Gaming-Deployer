@@ -814,6 +814,39 @@ input[type="checkbox"] {
   font-size: 0.9rem;
 }
 
+.server-players-actions {
+  margin-bottom: 1rem;
+}
+
+.server-players-stats {
+  margin-top: 0.5rem;
+}
+
+.server-players-count {
+  font-size: 1.05rem;
+  margin-bottom: 0.75rem;
+}
+
+.server-players-count strong {
+  color: #38bdf8;
+}
+
+.server-players-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.server-players-list-item {
+  padding: 0.35rem 0.75rem;
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 0.4rem;
+  font-size: 0.95rem;
+}
+
 .sftp-fields {
   display: flex;
   flex-direction: column;

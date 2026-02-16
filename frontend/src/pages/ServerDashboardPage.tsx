@@ -18,7 +18,7 @@ interface ServerInfo {
 }
 
 type ServiceStatus = "active" | "inactive" | "failed" | "unknown";
-type TabId = "console" | "config" | "backups" | "sftp";
+type TabId = "console" | "config" | "backups" | "players" | "sftp";
 
 export const ServerDashboardPage: React.FC = () => {
   const { id } = useParams();
@@ -37,6 +37,9 @@ export const ServerDashboardPage: React.FC = () => {
   const [backupCreating, setBackupCreating] = useState(false);
   const [backupDeleting, setBackupDeleting] = useState<string | null>(null);
   const [backupError, setBackupError] = useState<string | null>(null);
+  const [minecraftInfo, setMinecraftInfo] = useState<{ online: number; max: number; players: string[] } | null>(null);
+  const [minecraftInfoError, setMinecraftInfoError] = useState<string | null>(null);
+  const [minecraftInfoLoading, setMinecraftInfoLoading] = useState(false);
 
   const copyToClipboard = useCallback((text: string, label: string) => {
     navigator.clipboard.writeText(text).then(
@@ -107,6 +110,40 @@ export const ServerDashboardPage: React.FC = () => {
   useEffect(() => {
     if (activeTab === "backups" && serverId) fetchBackups();
   }, [activeTab, serverId, fetchBackups]);
+
+  const fetchMinecraftInfo = useCallback(async () => {
+    if (!serverId) return;
+    setMinecraftInfoLoading(true);
+    setMinecraftInfoError(null);
+    try {
+      const res = await apiGet<{ ok: boolean; online?: number; max?: number; players?: string[]; error?: string }>(
+        `/api/servers/${serverId}/minecraft-info`
+      );
+      if (res?.ok && res.online !== undefined) {
+        setMinecraftInfo({
+          online: res.online,
+          max: res.max ?? 0,
+          players: res.players ?? [],
+        });
+      } else {
+        setMinecraftInfo({ online: 0, max: 0, players: [] });
+        if (res?.error) setMinecraftInfoError(res.error);
+      }
+    } catch (e: unknown) {
+      setMinecraftInfo(null);
+      setMinecraftInfoError((e as Error).message ?? "Impossible de récupérer les infos");
+    } finally {
+      setMinecraftInfoLoading(false);
+    }
+  }, [serverId]);
+
+  useEffect(() => {
+    if (activeTab === "players" && serverId) {
+      fetchMinecraftInfo();
+      const t = setInterval(fetchMinecraftInfo, 10000);
+      return () => clearInterval(t);
+    }
+  }, [activeTab, serverId, fetchMinecraftInfo]);
 
   const onAction = async (action: "start" | "stop" | "restart") => {
     setActionLoading(action);
@@ -196,6 +233,7 @@ export const ServerDashboardPage: React.FC = () => {
     { id: "console", label: "Console & performances" },
     { id: "config", label: "Configuration" },
     { id: "backups", label: "Sauvegardes" },
+    { id: "players", label: "Joueurs" },
     { id: "sftp", label: "Connexion SFTP" },
   ];
 
@@ -344,6 +382,45 @@ export const ServerDashboardPage: React.FC = () => {
                 )}
               </div>
             </form>
+          </section>
+        )}
+
+        {activeTab === "players" && (
+          <section className="card server-panel server-panel--wide">
+            <h2 className="server-panel-title">Joueurs connectés</h2>
+            <p className="server-panel-desc">
+              Nombre de joueurs et liste des pseudos en jeu, mis à jour automatiquement via le serveur Minecraft (RCON).
+            </p>
+            <div className="server-players-actions">
+              <button
+                type="button"
+                className="server-btn server-btn--primary"
+                onClick={fetchMinecraftInfo}
+                disabled={minecraftInfoLoading}
+              >
+                {minecraftInfoLoading ? "Actualisation…" : "Actualiser"}
+              </button>
+            </div>
+            {minecraftInfoError && <p className="error server-panel-error">{minecraftInfoError}</p>}
+            {!minecraftInfoLoading && minecraftInfo && (
+              <div className="server-players-stats">
+                <p className="server-players-count">
+                  <strong>{minecraftInfo.online}</strong> joueur{minecraftInfo.online !== 1 ? "s" : ""} connecté{minecraftInfo.online !== 1 ? "s" : ""}
+                  {minecraftInfo.max > 0 && (
+                    <> (max. {minecraftInfo.max})</>
+                  )}
+                </p>
+                {minecraftInfo.players.length > 0 ? (
+                  <ul className="server-players-list">
+                    {minecraftInfo.players.map((name) => (
+                      <li key={name} className="server-players-list-item">{name}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="server-panel-desc">Aucun joueur connecté.</p>
+                )}
+              </div>
+            )}
           </section>
         )}
 

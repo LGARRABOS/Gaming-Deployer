@@ -60,7 +60,7 @@ case "$cmd" in
 
     echo "[2/4] Building frontend..."
     cd "$REPO_DIR/frontend"
-    npm install --omit=dev=false
+    npm install
     npm run build
     echo "    Frontend build completed."
     echo ""

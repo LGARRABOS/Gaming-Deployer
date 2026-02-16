@@ -80,6 +80,7 @@ func New(ctx context.Context, dbPath string) (*Server, error) {
 			r.Get("/servers/{id}", s.handleGetServer)
 			r.Post("/servers/{id}/action", s.handleServerAction)
 			r.Get("/servers/{id}/status", s.handleServerStatus)
+			r.Get("/servers/{id}/minecraft-info", s.handleMinecraftInfo)
 			r.Get("/servers/{id}/metrics", s.handleServerMetrics)
 			r.Get("/servers/{id}/config", s.handleGetServerConfig)
 			r.Put("/servers/{id}/config", s.handleUpdateServerConfig)

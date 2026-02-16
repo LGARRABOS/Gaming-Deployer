@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os/exec"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -325,6 +326,61 @@ func (s *Server) handleServerStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"status": status})
+}
+
+// handleMinecraftInfo returns in-game server info via RCON (player count and list).
+func (s *Server) handleMinecraftInfo(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	ip, _, err := s.getServerSSHTarget(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	port, password, err := s.getServerRCONConfig(ctx, deploymentID)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "RCON non configuré", "online": 0, "max": 0, "players": []string{}})
+		return
+	}
+	addr := fmt.Sprintf("%s:%d", ip, port)
+	client, err := rcon.Dial(addr, password)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error(), "online": 0, "max": 0, "players": []string{}})
+		return
+	}
+	defer client.Close()
+
+	resp, err := client.Execute("list")
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error(), "online": 0, "max": 0, "players": []string{}})
+		return
+	}
+	// Minecraft "list" returns e.g. "There are 2 of a max of 20 players online: Steve, Alex"
+	// or "There are 0 of a max of 20 players online:"
+	re := regexp.MustCompile(`(?i)there are (\d+) of a max of (\d+) players online:\s*(.*)`)
+	matches := re.FindStringSubmatch(strings.TrimSpace(resp))
+	online, maxPlayers := 0, 0
+	var players []string
+	if len(matches) >= 3 {
+		online, _ = strconv.Atoi(matches[1])
+		maxPlayers, _ = strconv.Atoi(matches[2])
+	}
+	if len(matches) >= 4 && strings.TrimSpace(matches[3]) != "" {
+		for _, name := range strings.Split(matches[3], ",") {
+			name = strings.TrimSpace(name)
+			if name != "" {
+				players = append(players, name)
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok": true, "online": online, "max": maxPlayers, "players": players,
+	})
 }
 
 // handleServerMetrics returns CPU, RAM and disk from the Proxmox API (same values as the Proxmox UI).
