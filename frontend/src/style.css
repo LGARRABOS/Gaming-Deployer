@@ -657,6 +657,9 @@ input[type="checkbox"] {
 
 .servers-dashboard-content {
   margin-top: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: start;
 }
 
 .server-dashboard-console-top {
@@ -674,10 +677,12 @@ input[type="checkbox"] {
 
 .server-panel {
   padding: 1.25rem 1.5rem;
+  min-width: 0;
 }
 
 .server-panel--wide {
   grid-column: 1 / -1;
+  max-width: 100%;
 }
 
 .server-panel-title {
@@ -843,6 +848,8 @@ input[type="checkbox"] {
   padding: 1rem;
   background: rgba(15, 23, 42, 0.6);
   margin-top: 1rem;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .server-players-box-title {
@@ -884,15 +891,6 @@ input[type="checkbox"] {
   font-size: 0.8rem;
 }
 
-.server-config-grid select {
-  padding: 0.4rem 0.6rem;
-  border-radius: 0.4rem;
-  border: 1px solid #334155;
-  background: #0f172a;
-  color: #e2e8f0;
-  font-size: 0.9rem;
-  min-width: 120px;
-}
 
 .server-players-list {
   list-style: none;
@@ -1130,21 +1128,40 @@ input[type="checkbox"] {
 
 .server-config-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 1rem;
   margin-bottom: 1.25rem;
+  align-items: start;
 }
 
 .server-config-grid label {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  min-height: 3.5rem;
 }
 
 .server-config-grid label span {
   font-size: 0.85rem;
   font-weight: 500;
   color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.server-config-grid input,
+.server-config-grid select {
+  height: 2.25rem;
+  box-sizing: border-box;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.4rem;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 0.9rem;
+}
+
+.server-config-grid select {
+  min-width: 120px;
 }
 
 .server-config-actions {

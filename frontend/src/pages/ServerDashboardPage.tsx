@@ -20,6 +20,34 @@ interface ServerInfo {
 type ServiceStatus = "active" | "inactive" | "failed" | "unknown";
 type TabId = "console" | "config" | "backups" | "players" | "sftp";
 
+/** Valeurs par défaut server.properties (Minecraft) pour affichage et préremplissage */
+const CONFIG_DEFAULTS: Record<string, string> = {
+  "server-port": "25565",
+  motd: "A Minecraft Server",
+  "max-players": "20",
+  "level-name": "world",
+  "level-seed": "",
+  "level-type": "default",
+  "online-mode": "true",
+  "white-list": "false",
+  "enforce-whitelist": "false",
+  gamemode: "survival",
+  difficulty: "easy",
+  pvp: "true",
+  hardcore: "false",
+  "allow-flight": "false",
+  "view-distance": "10",
+  "simulation-distance": "10",
+  "spawn-protection": "16",
+  "allow-nether": "true",
+  "spawn-monsters": "true",
+  "spawn-animals": "true",
+  "generate-structures": "true",
+  "max-world-size": "29999984",
+  "enable-command-block": "false",
+  "max-tick-time": "60000",
+};
+
 export const ServerDashboardPage: React.FC = () => {
   const { id } = useParams();
   const serverId = Number(id);
@@ -28,7 +56,7 @@ export const ServerDashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [configProps, setConfigProps] = useState<Record<string, string>>({});
+  const [configProps, setConfigProps] = useState<Record<string, string>>({ ...CONFIG_DEFAULTS });
   const [configSaving, setConfigSaving] = useState(false);
   const [configMessage, setConfigMessage] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
@@ -85,7 +113,7 @@ export const ServerDashboardPage: React.FC = () => {
       const res = await apiGet<{ ok: boolean; properties?: Record<string, string> }>(
         `/api/servers/${serverId}/config`
       );
-      if (res?.ok && res.properties) setConfigProps(res.properties);
+      if (res?.ok && res.properties) setConfigProps({ ...CONFIG_DEFAULTS, ...res.properties });
     } catch {
       // ignore
     }
@@ -368,17 +396,15 @@ export const ServerDashboardPage: React.FC = () => {
                     type="number"
                     min={1}
                     max={65535}
-                    value={configProps["server-port"] ?? ""}
+                    value={configProps["server-port"] ?? CONFIG_DEFAULTS["server-port"]}
                     onChange={(e) => setConfigProps((p) => ({ ...p, "server-port": e.target.value }))}
-                    placeholder="25565"
                   />
                 </label>
                 <label>
                   <span>MOTD (message d’accueil)</span>
                   <input
-                    value={configProps["motd"] ?? ""}
+                    value={configProps["motd"] ?? CONFIG_DEFAULTS.motd}
                     onChange={(e) => setConfigProps((p) => ({ ...p, motd: e.target.value }))}
-                    placeholder="A Minecraft Server"
                   />
                 </label>
                 <label>
@@ -386,21 +412,19 @@ export const ServerDashboardPage: React.FC = () => {
                   <input
                     type="number"
                     min={1}
-                    value={configProps["max-players"] ?? ""}
+                    value={configProps["max-players"] ?? CONFIG_DEFAULTS["max-players"]}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "max-players": e.target.value }))
                     }
-                    placeholder="20"
                   />
                 </label>
                 <label>
                   <span>Nom du monde</span>
                   <input
-                    value={configProps["level-name"] ?? ""}
+                    value={configProps["level-name"] ?? CONFIG_DEFAULTS["level-name"]}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "level-name": e.target.value }))
                     }
-                    placeholder="world"
                   />
                 </label>
                 <label>
@@ -410,18 +434,17 @@ export const ServerDashboardPage: React.FC = () => {
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "level-seed": e.target.value }))
                     }
-                    placeholder="optionnel"
+                    placeholder="vide = aléatoire"
                   />
                 </label>
                 <label>
                   <span>Type de monde</span>
                   <select
-                    value={configProps["level-type"] ?? ""}
+                    value={configProps["level-type"] ?? CONFIG_DEFAULTS["level-type"]}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "level-type": e.target.value }))
                     }
                   >
-                    <option value="">—</option>
                     <option value="default">Default</option>
                     <option value="flat">Flat</option>
                     <option value="largeBiomes">Large Biomes</option>
@@ -435,12 +458,11 @@ export const ServerDashboardPage: React.FC = () => {
                 <label>
                   <span>Mode en ligne (authentification Mojang)</span>
                   <select
-                    value={configProps["online-mode"] ?? ""}
+                    value={configProps["online-mode"] ?? CONFIG_DEFAULTS["online-mode"]}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "online-mode": e.target.value }))
                     }
                   >
-                    <option value="">—</option>
                     <option value="true">Oui</option>
                     <option value="false">Non (cracked)</option>
                   </select>
@@ -448,12 +470,11 @@ export const ServerDashboardPage: React.FC = () => {
                 <label>
                   <span>Liste blanche (whitelist)</span>
                   <select
-                    value={configProps["white-list"] ?? ""}
+                    value={configProps["white-list"] ?? CONFIG_DEFAULTS["white-list"]}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "white-list": e.target.value }))
                     }
                   >
-                    <option value="">—</option>
                     <option value="true">Activée</option>
                     <option value="false">Désactivée</option>
                   </select>
@@ -461,12 +482,11 @@ export const ServerDashboardPage: React.FC = () => {
                 <label>
                   <span>Exclure les non-whitelist (enforce-whitelist)</span>
                   <select
-                    value={configProps["enforce-whitelist"] ?? ""}
+                    value={configProps["enforce-whitelist"] ?? CONFIG_DEFAULTS["enforce-whitelist"]}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "enforce-whitelist": e.target.value }))
                     }
                   >
-                    <option value="">—</option>
                     <option value="true">Oui</option>
                     <option value="false">Non</option>
                   </select>
@@ -478,12 +498,11 @@ export const ServerDashboardPage: React.FC = () => {
                 <label>
                   <span>Mode de jeu par défaut</span>
                   <select
-                    value={configProps["gamemode"] ?? ""}
+                    value={configProps["gamemode"] ?? CONFIG_DEFAULTS.gamemode}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, gamemode: e.target.value }))
                     }
                   >
-                    <option value="">—</option>
                     <option value="survival">Survival</option>
                     <option value="creative">Creative</option>
                     <option value="adventure">Adventure</option>
@@ -493,12 +512,11 @@ export const ServerDashboardPage: React.FC = () => {
                 <label>
                   <span>Difficulté</span>
                   <select
-                    value={configProps["difficulty"] ?? ""}
+                    value={configProps["difficulty"] ?? CONFIG_DEFAULTS.difficulty}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, difficulty: e.target.value }))
                     }
                   >
-                    <option value="">—</option>
                     <option value="peaceful">Peaceful</option>
                     <option value="easy">Easy</option>
                     <option value="normal">Normal</option>
@@ -508,10 +526,9 @@ export const ServerDashboardPage: React.FC = () => {
                 <label>
                   <span>PVP</span>
                   <select
-                    value={configProps["pvp"] ?? ""}
+                    value={configProps["pvp"] ?? CONFIG_DEFAULTS.pvp}
                     onChange={(e) => setConfigProps((p) => ({ ...p, pvp: e.target.value }))}
                   >
-                    <option value="">—</option>
                     <option value="true">Activé</option>
                     <option value="false">Désactivé</option>
                   </select>
@@ -519,12 +536,11 @@ export const ServerDashboardPage: React.FC = () => {
                 <label>
                   <span>Mode hardcore</span>
                   <select
-                    value={configProps["hardcore"] ?? ""}
+                    value={configProps["hardcore"] ?? CONFIG_DEFAULTS.hardcore}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, hardcore: e.target.value }))
                     }
                   >
-                    <option value="">—</option>
                     <option value="true">Oui</option>
                     <option value="false">Non</option>
                   </select>
@@ -532,12 +548,11 @@ export const ServerDashboardPage: React.FC = () => {
                 <label>
                   <span>Vol autorisé (allow-flight)</span>
                   <select
-                    value={configProps["allow-flight"] ?? ""}
+                    value={configProps["allow-flight"] ?? CONFIG_DEFAULTS["allow-flight"]}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "allow-flight": e.target.value }))
                     }
                   >
-                    <option value="">—</option>
                     <option value="true">Oui</option>
                     <option value="false">Non</option>
                   </select>
@@ -552,11 +567,10 @@ export const ServerDashboardPage: React.FC = () => {
                     type="number"
                     min={2}
                     max={32}
-                    value={configProps["view-distance"] ?? ""}
+                    value={configProps["view-distance"] ?? CONFIG_DEFAULTS["view-distance"]}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "view-distance": e.target.value }))
                     }
-                    placeholder="10"
                   />
                 </label>
                 <label>
@@ -565,11 +579,10 @@ export const ServerDashboardPage: React.FC = () => {
                     type="number"
                     min={1}
                     max={32}
-                    value={configProps["simulation-distance"] ?? ""}
+                    value={configProps["simulation-distance"] ?? CONFIG_DEFAULTS["simulation-distance"]}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "simulation-distance": e.target.value }))
                     }
-                    placeholder="10"
                   />
                 </label>
                 <label>
@@ -578,22 +591,20 @@ export const ServerDashboardPage: React.FC = () => {
                     type="number"
                     min={0}
                     max={256}
-                    value={configProps["spawn-protection"] ?? ""}
+                    value={configProps["spawn-protection"] ?? CONFIG_DEFAULTS["spawn-protection"]}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "spawn-protection": e.target.value }))
                     }
-                    placeholder="16"
                   />
                 </label>
                 <label>
                   <span>Nether autorisé</span>
                   <select
-                    value={configProps["allow-nether"] ?? ""}
+                    value={configProps["allow-nether"] ?? CONFIG_DEFAULTS["allow-nether"]}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "allow-nether": e.target.value }))
                     }
                   >
-                    <option value="">—</option>
                     <option value="true">Oui</option>
                     <option value="false">Non</option>
                   </select>
@@ -601,12 +612,11 @@ export const ServerDashboardPage: React.FC = () => {
                 <label>
                   <span>Apparition des monstres</span>
                   <select
-                    value={configProps["spawn-monsters"] ?? ""}
+                    value={configProps["spawn-monsters"] ?? CONFIG_DEFAULTS["spawn-monsters"]}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "spawn-monsters": e.target.value }))
                     }
                   >
-                    <option value="">—</option>
                     <option value="true">Oui</option>
                     <option value="false">Non</option>
                   </select>
@@ -614,12 +624,11 @@ export const ServerDashboardPage: React.FC = () => {
                 <label>
                   <span>Apparition des animaux</span>
                   <select
-                    value={configProps["spawn-animals"] ?? ""}
+                    value={configProps["spawn-animals"] ?? CONFIG_DEFAULTS["spawn-animals"]}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "spawn-animals": e.target.value }))
                     }
                   >
-                    <option value="">—</option>
                     <option value="true">Oui</option>
                     <option value="false">Non</option>
                   </select>
@@ -627,12 +636,11 @@ export const ServerDashboardPage: React.FC = () => {
                 <label>
                   <span>Génération des structures</span>
                   <select
-                    value={configProps["generate-structures"] ?? ""}
+                    value={configProps["generate-structures"] ?? CONFIG_DEFAULTS["generate-structures"]}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "generate-structures": e.target.value }))
                     }
                   >
-                    <option value="">—</option>
                     <option value="true">Oui</option>
                     <option value="false">Non</option>
                   </select>
@@ -643,11 +651,10 @@ export const ServerDashboardPage: React.FC = () => {
                     type="number"
                     min={1}
                     max={29999984}
-                    value={configProps["max-world-size"] ?? ""}
+                    value={configProps["max-world-size"] ?? CONFIG_DEFAULTS["max-world-size"]}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "max-world-size": e.target.value }))
                     }
-                    placeholder="29999984"
                   />
                 </label>
               </div>
@@ -657,12 +664,11 @@ export const ServerDashboardPage: React.FC = () => {
                 <label>
                   <span>Bloc de commande (command blocks)</span>
                   <select
-                    value={configProps["enable-command-block"] ?? ""}
+                    value={configProps["enable-command-block"] ?? CONFIG_DEFAULTS["enable-command-block"]}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "enable-command-block": e.target.value }))
                     }
                   >
-                    <option value="">—</option>
                     <option value="true">Activé</option>
                     <option value="false">Désactivé</option>
                   </select>
@@ -672,11 +678,10 @@ export const ServerDashboardPage: React.FC = () => {
                   <input
                     type="number"
                     min={-1}
-                    value={configProps["max-tick-time"] ?? ""}
+                    value={configProps["max-tick-time"] ?? CONFIG_DEFAULTS["max-tick-time"]}
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "max-tick-time": e.target.value }))
                     }
-                    placeholder="60000"
                   />
                 </label>
               </div>
