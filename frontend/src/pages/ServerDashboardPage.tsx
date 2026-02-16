@@ -1,10 +1,14 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPost } from "../api/client";
 import { ServerConsole } from "../components/ServerConsole";
 import { ServerFileBrowser } from "../components/ServerFileBrowser";
 import { ServerMetrics } from "../components/ServerMetrics";
-import { ServerMonitoringCharts } from "../components/ServerMonitoringCharts";
+import { useServerMonitoringData } from "../hooks/useServerMonitoringData";
+
+const ServerMonitoringCharts = lazy(() =>
+  import("../components/ServerMonitoringCharts").then((m) => ({ default: m.ServerMonitoringCharts }))
+);
 
 interface ServerInfo {
   id: number;
@@ -75,6 +79,8 @@ export const ServerDashboardPage: React.FC = () => {
   const [minecraftInfoLoading, setMinecraftInfoLoading] = useState(false);
   const [playerActionLoading, setPlayerActionLoading] = useState<string | null>(null);
   const [playerActionMessage, setPlayerActionMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+
+  const { data: monitoringData, loading: monitoringLoading } = useServerMonitoringData(serverId || null);
 
   const copyToClipboard = useCallback((text: string, label: string) => {
     navigator.clipboard.writeText(text).then(
@@ -801,7 +807,17 @@ export const ServerDashboardPage: React.FC = () => {
           );
         })()}
 
-        {activeTab === "monitoring" && <ServerMonitoringCharts serverId={serverId} />}
+        {activeTab === "monitoring" && (
+          <Suspense
+            fallback={
+              <section className="card server-panel server-panel--wide">
+                <p className="server-panel-desc">Chargement des graphiques…</p>
+              </section>
+            }
+          >
+            <ServerMonitoringCharts data={monitoringData} loading={monitoringLoading} />
+          </Suspense>
+        )}
 
         {activeTab === "backups" && (
           <section className="card server-panel server-panel--wide">
