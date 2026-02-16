@@ -1200,6 +1200,33 @@ input[type="checkbox"] {
   margin-bottom: 1rem;
 }
 
+/* Monitoring tab: live charts */
+.server-monitoring-panel .server-panel-desc {
+  margin-bottom: 1rem;
+}
+
+.server-monitoring-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 1.5rem;
+  margin-top: 0.5rem;
+}
+
+.server-monitoring-chart-wrap {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid #1e293b;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  min-height: 220px;
+}
+
+.server-monitoring-chart-title {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
 .server-metrics-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

@@ -4,6 +4,7 @@ import { apiDelete, apiGet, apiPost } from "../api/client";
 import { ServerConsole } from "../components/ServerConsole";
 import { ServerFileBrowser } from "../components/ServerFileBrowser";
 import { ServerMetrics } from "../components/ServerMetrics";
+import { ServerMonitoringCharts } from "../components/ServerMonitoringCharts";
 
 interface ServerInfo {
   id: number;
@@ -18,7 +19,7 @@ interface ServerInfo {
 }
 
 type ServiceStatus = "active" | "inactive" | "failed" | "unknown";
-type TabId = "console" | "config" | "backups" | "players" | "sftp";
+type TabId = "console" | "config" | "backups" | "players" | "monitoring" | "sftp";
 
 /** Valeurs par défaut server.properties (Minecraft) pour affichage et préremplissage */
 const CONFIG_DEFAULTS: Record<string, string> = {
@@ -295,6 +296,7 @@ export const ServerDashboardPage: React.FC = () => {
     { id: "config", label: "Configuration" },
     { id: "backups", label: "Sauvegardes" },
     { id: "players", label: "Joueurs" },
+    { id: "monitoring", label: "Monitoring" },
     { id: "sftp", label: "Connexion SFTP" },
   ];
 
@@ -798,6 +800,8 @@ export const ServerDashboardPage: React.FC = () => {
             </section>
           );
         })()}
+
+        {activeTab === "monitoring" && <ServerMonitoringCharts serverId={serverId} />}
 
         {activeTab === "backups" && (
           <section className="card server-panel server-panel--wide">
