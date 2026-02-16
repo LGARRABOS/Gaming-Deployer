@@ -51,3 +51,24 @@ export async function apiDelete(path: string): Promise<void> {
   }
 }
 
+/** PUT raw body (e.g. file content). Returns JSON if present. */
+export async function apiPutRaw(path: string, body: string | Blob): Promise<{ ok?: boolean; error?: string }> {
+  const res = await fetch(path, {
+    method: "PUT",
+    credentials: "include",
+    body,
+  });
+  const ct = res.headers.get("Content-Type") ?? "";
+  if (!res.ok) {
+    if (ct.includes("application/json")) {
+      const data = (await res.json()) as { error?: string; message?: string };
+      throw new Error(data?.error ?? data?.message ?? res.statusText);
+    }
+    throw new Error(res.statusText);
+  }
+  if (ct.includes("application/json")) {
+    return (await res.json()) as { ok?: boolean; error?: string };
+  }
+  return { ok: true };
+}
+

@@ -1,12 +1,15 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os/exec"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -855,6 +858,267 @@ func (s *Server) handleDeleteBackup(w http.ResponseWriter, r *http.Request) {
 	cmd := "sudo rm -f " + fullPath
 	if _, _, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, cmd); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// resolveFilesPath validates path (relative to mc_dir) and returns full path on VM. Path must stay under mc_dir.
+func resolveFilesPath(mcDir, queryPath string) (fullPath string, err error) {
+	rel := path.Clean("/" + strings.TrimPrefix(queryPath, "/"))
+	rel = strings.TrimPrefix(rel, "/")
+	if strings.Contains(rel, "..") {
+		return "", fmt.Errorf("invalid path")
+	}
+	fullPath = path.Join(mcDir, rel)
+	norm := path.Clean(fullPath)
+	base := path.Clean(mcDir)
+	if norm != base && !strings.HasPrefix(norm, base+"/") {
+		return "", fmt.Errorf("invalid path")
+	}
+	return fullPath, nil
+}
+
+// handleListFiles lists directory contents under mc_dir. Query: path= (relative to mc_dir).
+func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	mcDir, mcUser, err := s.getServerMinecraftPath(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	fullPath, err := resolveFilesPath(mcDir, r.URL.Query().Get("path"))
+	if err != nil {
+		http.Error(w, "invalid path", http.StatusBadRequest)
+		return
+	}
+	ip, sshUser, err := s.getServerSSHTarget(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	keyPath := sshexec.KeyPath()
+	// GNU find: name|size|mtime|type(d/f). Fallback: ls -1A then stat per line (slower).
+	cmd := fmt.Sprintf("sudo -u %s find %s -maxdepth 1 -mindepth 1 -printf '%%f|%%s|%%T@|%%y\n' 2>/dev/null || ( cd %s && for f in $(ls -1A); do stat -c '%%n|%%s|%%Y|%%F' \"$f\" 2>/dev/null | sed 's|.*/||; s|regular file|f|; s|directory|d|'; done )", mcUser, fullPath, fullPath)
+	stdout, _, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, cmd)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "entries": []any{}})
+		return
+	}
+	var entries []map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "|", 4)
+		if len(parts) < 4 {
+			continue
+		}
+		name := parts[0]
+		if name == "" || name == "." || name == ".." {
+			continue
+		}
+		size, _ := strconv.ParseInt(parts[1], 10, 64)
+		mtime, _ := strconv.ParseInt(parts[2], 10, 64)
+		typ := "f"
+		if strings.HasPrefix(parts[3], "d") || parts[3] == "directory" {
+			typ = "d"
+		}
+		entries = append(entries, map[string]any{"name": name, "size": size, "mtime": mtime, "dir": typ == "d"})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "entries": entries})
+}
+
+// handleGetFileContent returns file content. Query: path=
+func (s *Server) handleGetFileContent(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	mcDir, _, err := s.getServerMinecraftPath(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	fullPath, err := resolveFilesPath(mcDir, r.URL.Query().Get("path"))
+	if err != nil {
+		http.Error(w, "invalid path", http.StatusBadRequest)
+		return
+	}
+	ip, sshUser, err := s.getServerSSHTarget(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	keyPath := sshexec.KeyPath()
+	cmd := "sudo cat " + fullPath
+	// Return as base64 so we can safely send binary in JSON for the editor; or stream for download
+	asAttachment := r.URL.Query().Get("download") == "1"
+	if asAttachment {
+		w.Header().Set("Content-Disposition", "attachment; filename=\""+path.Base(fullPath)+"\"")
+		_ = sshexec.RunCommandStream(ctx, ip, sshUser, keyPath, cmd, w)
+		return
+	}
+	var buf bytes.Buffer
+	if err := sshexec.RunCommandStream(ctx, ip, sshUser, keyPath, cmd, &buf); err != nil {
+		http.Error(w, "download failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// JSON response with base64 content for in-app editor
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "content": base64.StdEncoding.EncodeToString(buf.Bytes())})
+}
+
+// handlePutFileContent writes file content. Body = raw bytes. Query: path=
+func (s *Server) handlePutFileContent(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	mcDir, mcUser, err := s.getServerMinecraftPath(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	fullPath, err := resolveFilesPath(mcDir, r.URL.Query().Get("path"))
+	if err != nil {
+		http.Error(w, "invalid path", http.StatusBadRequest)
+		return
+	}
+	ip, sshUser, err := s.getServerSSHTarget(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	keyPath := sshexec.KeyPath()
+	// Ensure parent dir exists and write as mc_user: sudo -u mcuser tee path
+	parent := path.Dir(fullPath)
+	cmd := fmt.Sprintf("sudo mkdir -p %s && sudo -u %s tee %s > /dev/null", parent, mcUser, fullPath)
+	if err := sshexec.RunCommandWithStdin(ctx, ip, sshUser, keyPath, cmd, r.Body); err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// handleDeleteFile deletes a file or directory. Query: path=
+func (s *Server) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	mcDir, _, err := s.getServerMinecraftPath(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	fullPath, err := resolveFilesPath(mcDir, r.URL.Query().Get("path"))
+	if err != nil {
+		http.Error(w, "invalid path", http.StatusBadRequest)
+		return
+	}
+	ip, sshUser, err := s.getServerSSHTarget(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	keyPath := sshexec.KeyPath()
+	cmd := "sudo rm -rf " + fullPath
+	if _, _, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, cmd); err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// handleUploadFile and handleMkdir: multipart upload or mkdir. POST body: path= (dir) + file, or path= & mkdir=name
+func (s *Server) handleUploadFile(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		// Allow url-encoded for mkdir-only
+		_ = r.ParseForm()
+	}
+	idStr := chi.URLParam(r, "id")
+	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	mcDir, mcUser, err := s.getServerMinecraftPath(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	dirPath := r.URL.Query().Get("path")
+	if dirPath == "" {
+		dirPath = r.FormValue("path")
+	}
+	if dirPath != "" {
+		if _, err := resolveFilesPath(mcDir, dirPath); err != nil {
+			http.Error(w, "invalid path", http.StatusBadRequest)
+			return
+		}
+	}
+	mkdirName := r.FormValue("mkdir")
+	if mkdirName != "" {
+		if strings.Contains(mkdirName, "/") || strings.Contains(mkdirName, "..") {
+			http.Error(w, "invalid name", http.StatusBadRequest)
+			return
+		}
+		fullPath, _ := resolveFilesPath(mcDir, path.Join(dirPath, mkdirName))
+		ip, sshUser, err := s.getServerSSHTarget(ctx, deploymentID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		cmd := fmt.Sprintf("sudo -u %s mkdir -p %s", mcUser, fullPath)
+		if _, _, err := sshexec.RunCommand(ctx, ip, sshUser, sshexec.KeyPath(), cmd); err != nil {
+			writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "missing file"})
+		return
+	}
+	defer file.Close()
+	fileName := header.Filename
+	if fileName == "" || strings.Contains(fileName, "/") || strings.Contains(fileName, "..") {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "invalid filename"})
+		return
+	}
+	fullPath, err := resolveFilesPath(mcDir, path.Join(dirPath, fileName))
+	if err != nil {
+		http.Error(w, "invalid path", http.StatusBadRequest)
+		return
+	}
+	ip, sshUser, err := s.getServerSSHTarget(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	parent := path.Dir(fullPath)
+	cmd := fmt.Sprintf("sudo mkdir -p %s && sudo -u %s tee %s > /dev/null", parent, mcUser, fullPath)
+	if err := sshexec.RunCommandWithStdin(ctx, ip, sshUser, sshexec.KeyPath(), cmd, file); err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})

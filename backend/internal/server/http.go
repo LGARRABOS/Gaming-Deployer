@@ -91,6 +91,11 @@ func New(ctx context.Context, dbPath string) (*Server, error) {
 			r.Post("/servers/{id}/backup", s.handleCreateBackup)
 			r.Delete("/servers/{id}/backup", s.handleDeleteBackup)
 			r.Get("/servers/{id}/backup/download", s.handleDownloadBackup)
+			r.Get("/servers/{id}/files", s.handleListFiles)
+			r.Get("/servers/{id}/files/content", s.handleGetFileContent)
+			r.Put("/servers/{id}/files/content", s.handlePutFileContent)
+			r.Delete("/servers/{id}/files", s.handleDeleteFile)
+			r.Post("/servers/{id}/files", s.handleUploadFile)
 		})
 	})
 

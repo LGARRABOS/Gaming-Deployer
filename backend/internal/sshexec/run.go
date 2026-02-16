@@ -100,3 +100,23 @@ func RunCommandStream(ctx context.Context, host, user, keyPath, command string, 
 	cmd.Stderr = nil
 	return cmd.Run()
 }
+
+// RunCommandWithStdin runs a remote command with stdin from r (e.g. for uploading a file via "cat > path").
+func RunCommandWithStdin(ctx context.Context, host, user, keyPath, command string, r io.Reader) error {
+	if keyPath == "" {
+		keyPath = KeyPath()
+	}
+	args := []string{
+		"-i", keyPath,
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "ConnectTimeout=15",
+		fmt.Sprintf("%s@%s", user, host),
+		command,
+	}
+	cmd := exec.CommandContext(ctx, "ssh", args...)
+	cmd.Stdin = r
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	return cmd.Run()
+}

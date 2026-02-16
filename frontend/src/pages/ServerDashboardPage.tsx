@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPost } from "../api/client";
 import { ServerConsole } from "../components/ServerConsole";
+import { ServerFileBrowser } from "../components/ServerFileBrowser";
 import { ServerMetrics } from "../components/ServerMetrics";
 
 interface ServerInfo {
@@ -442,6 +443,8 @@ export const ServerDashboardPage: React.FC = () => {
                 >
                   Copier toutes les infos d'accès SFTP
                 </button>
+                <hr className="server-files-divider" />
+                <ServerFileBrowser serverId={serverId} />
               </>
             ) : (
               <p className="server-panel-desc">Aucun accès SFTP configuré pour ce serveur.</p>

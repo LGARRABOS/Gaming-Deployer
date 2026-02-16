@@ -853,6 +853,167 @@ input[type="checkbox"] {
   flex-shrink: 0;
 }
 
+.server-files-divider {
+  margin: 1.5rem 0;
+  border: none;
+  border-top: 1px solid #1e293b;
+}
+
+.server-files-browser,
+.server-files-editor {
+  margin-top: 0.5rem;
+}
+
+.server-files-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.server-files-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  font-size: 0.9rem;
+}
+
+.server-files-breadcrumb-item {
+  padding: 0.25rem 0.5rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.35rem;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.server-files-breadcrumb-item:hover {
+  color: #e2e8f0;
+  background: rgba(30, 41, 59, 0.6);
+}
+
+.server-files-breadcrumb-sep {
+  color: #475569;
+  user-select: none;
+}
+
+.server-files-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.server-files-mkdir {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.server-files-mkdir input {
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.4rem;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 0.9rem;
+  min-width: 140px;
+}
+
+.server-files-list-wrap {
+  overflow: auto;
+  max-height: 420px;
+  border: 1px solid #1e293b;
+  border-radius: 0.5rem;
+  background: #0f172a;
+}
+
+.server-files-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.server-files-table th,
+.server-files-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #1e293b;
+}
+
+.server-files-table th {
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.server-files-table tr.selected td {
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.server-files-row-link {
+  display: inline-block;
+  padding: 0.2rem 0;
+  background: none;
+  border: none;
+  color: #38bdf8;
+  cursor: pointer;
+  font-size: inherit;
+  text-align: left;
+}
+
+.server-files-row-link:hover {
+  text-decoration: underline;
+}
+
+.server-files-hint {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.server-files-editor-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.server-files-editor-title {
+  font-family: ui-monospace, monospace;
+  font-size: 0.9rem;
+  color: #94a3b8;
+}
+
+.server-files-editor-textarea {
+  width: 100%;
+  min-height: 320px;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family: ui-monospace, monospace;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.server-files-editor-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.hidden {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* Config form */
 .server-config-form {
   margin-top: 0.5rem;
