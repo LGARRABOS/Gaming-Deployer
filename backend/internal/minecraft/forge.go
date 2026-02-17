@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -18,6 +19,38 @@ type forgePromotions struct {
 
 // releaseRecommendedRegex matches keys like "1.20.4-recommended" (MC 1.x.x recommended).
 var releaseRecommendedRegex = regexp.MustCompile(`^(1\.\d+\.\d+)-recommended$`)
+
+// parseMCVersion parses "1.21.11" into [1, 21, 11]. Returns nil if invalid.
+func parseMCVersion(s string) []int {
+	parts := strings.Split(s, ".")
+	if len(parts) < 2 {
+		return nil
+	}
+	var out []int
+	for _, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil {
+			return nil
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+// mcVersionGreater returns true if a is a newer Minecraft version than b (e.g. 1.21.11 > 1.21.3).
+func mcVersionGreater(a, b string) bool {
+	va := parseMCVersion(a)
+	vb := parseMCVersion(b)
+	if va == nil || vb == nil {
+		return a > b // fallback lexicographic
+	}
+	for i := 0; i < len(va) && i < len(vb); i++ {
+		if va[i] != vb[i] {
+			return va[i] > vb[i]
+		}
+	}
+	return len(va) > len(vb)
+}
 
 // ForgeVersionEntry is one stable (recommended) Forge version for a Minecraft release.
 type ForgeVersionEntry struct {
@@ -64,10 +97,10 @@ func GetForgeReleaseVersions() ([]ForgeVersionEntry, error) {
 			InstallerURL: installerURL,
 		})
 	}
-	// Sort by full_version descending (newest first)
+	// Sort by MC version descending (newest first: 1.21.11, 1.21.10, ..., 1.7.2)
 	for i := 0; i < len(list); i++ {
 		for j := i + 1; j < len(list); j++ {
-			if list[j].FullVersion > list[i].FullVersion {
+			if mcVersionGreater(list[j].MCVersion, list[i].MCVersion) {
 				list[i], list[j] = list[j], list[i]
 			}
 		}

@@ -65,6 +65,15 @@ export const CreateMinecraftServerPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setForm((f) => {
+      if (f.minecraft.type !== "vanilla" && f.minecraft.type !== "forge") {
+        return { ...f, minecraft: { ...f.minecraft, type: "vanilla" } };
+      }
+      return f;
+    });
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     setVersionsLoading(true);
     apiGet<{ versions: string[]; latest: string; forge_versions?: { mc_version: string; forge_build: string; full_version: string }[] }>("/api/minecraft/versions")
@@ -180,14 +189,11 @@ export const CreateMinecraftServerPage: React.FC = () => {
             <label>
               <span>Type</span>
               <select
-                value={form.minecraft.type}
+                value={form.minecraft.type === "vanilla" || form.minecraft.type === "forge" ? form.minecraft.type : "vanilla"}
                 onChange={(e) => updateMinecraft("type", e.target.value as MinecraftConfig["type"])}
               >
                 <option value="vanilla">Vanilla</option>
-                <option value="paper">Paper</option>
-                <option value="purpur">Purpur</option>
                 <option value="forge">Forge</option>
-                <option value="fabric">Fabric</option>
               </select>
             </label>
             {form.minecraft.type === "vanilla" ? (
