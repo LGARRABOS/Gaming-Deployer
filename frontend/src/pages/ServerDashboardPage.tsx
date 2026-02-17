@@ -352,9 +352,6 @@ export const ServerDashboardPage: React.FC = () => {
             <div className="server-dashboard-console-top">
               <section className="card server-panel">
                 <h2 className="server-panel-title">Contrôle du serveur</h2>
-                <p className="server-panel-desc">
-                  Démarrer, arrêter ou redémarrer le service Minecraft.
-                </p>
                 <div className="server-actions">
                   <button
                     type="button"
@@ -392,9 +389,6 @@ export const ServerDashboardPage: React.FC = () => {
         {activeTab === "config" && (
           <section className="card server-panel server-panel--wide">
             <h2 className="server-panel-title">Configuration (server.properties)</h2>
-            <p className="server-panel-desc">
-              Modifiez les paramètres du serveur Minecraft. Pensez à redémarrer le serveur pour que certaines options prennent effet.
-            </p>
             <form onSubmit={onSaveConfig} className="server-config-form">
               <h3 className="server-config-section">Réseau et général</h3>
               <div className="server-config-grid">
@@ -713,9 +707,6 @@ export const ServerDashboardPage: React.FC = () => {
           return (
             <section className="card server-panel server-panel--wide">
               <h2 className="server-panel-title">Joueurs connectés</h2>
-              <p className="server-panel-desc">
-                Nombre de joueurs et liste des pseudos en jeu, mis à jour via le serveur Minecraft (RCON). Si le serveur est éteint, 0/0 s’affiche.
-              </p>
               <div className="server-players-actions">
                 <button
                   type="button"
@@ -822,9 +813,6 @@ export const ServerDashboardPage: React.FC = () => {
         {activeTab === "backups" && (
           <section className="card server-panel server-panel--wide">
             <h2 className="server-panel-title">Sauvegardes</h2>
-            <p className="server-panel-desc">
-              Créer une sauvegarde compressée du dossier Minecraft (monde, config, etc.) et la télécharger.
-            </p>
             <div className="server-backups-actions">
               <button
                 type="button"
@@ -873,9 +861,6 @@ export const ServerDashboardPage: React.FC = () => {
         {activeTab === "sftp" && (
           <section className="card server-panel server-panel--wide">
             <h2 className="server-panel-title">Connexion SFTP</h2>
-            <p className="server-panel-desc">
-              Utilise ces identifiants dans WinSCP, FileZilla, etc. Le dossier <code>minecraft</code> contient les fichiers du serveur.
-            </p>
             {server.sftp_user && server.sftp_password ? (
               <>
                 <div className="sftp-fields">

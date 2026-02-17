@@ -339,9 +339,6 @@ export const ServerFileBrowser: React.FC<Props> = ({ serverId }) => {
           <p className="server-panel-desc">Dossier vide ou inaccessible.</p>
         )}
       </div>
-      <p className="server-panel-desc server-files-hint">
-        Double-clic sur un fichier pour l’éditer, ou sélectionnez-le puis utilisez les boutons. Les identifiants SFTP ci-dessus restent utilisables avec un client externe.
-      </p>
     </div>
   );
 };

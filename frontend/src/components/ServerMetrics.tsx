@@ -69,7 +69,6 @@ export const ServerMetrics: React.FC<Props> = ({ serverId }) => {
   return (
     <section className="card server-panel server-metrics-panel">
       <h2 className="server-panel-title">Performances</h2>
-      <p className="server-panel-desc">CPU, RAM et stockage en temps réel.</p>
       <div className="server-metrics-grid">
         <div className="server-metric">
           <div className="server-metric-header">

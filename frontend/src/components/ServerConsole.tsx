@@ -111,9 +111,6 @@ export const ServerConsole: React.FC<Props> = ({ serverId }) => {
     <section className="card server-panel server-panel--wide server-console-panel">
       <div className="server-console-header">
         <h2 className="server-panel-title">Console du serveur Minecraft</h2>
-        <p className="server-panel-desc">
-          Sortie du serveur en direct. Saisis une commande en bas pour l’envoyer au serveur.
-        </p>
         <div className="server-console-actions">
           <button type="button" className="server-btn server-btn--stop" onClick={clear}>
             Effacer
