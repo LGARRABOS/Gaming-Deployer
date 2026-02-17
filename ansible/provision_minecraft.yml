@@ -199,6 +199,21 @@
         creates: "{{ mc_dir }}/fabric-server-launch.jar"
       when: mc_fabric_installer_url is defined
 
+    # Fabric's launcher expects the vanilla server JAR at server.jar; download it for the same MC version.
+    - name: Download vanilla server jar for Fabric
+      get_url:
+        url: "{{ mc_server_jar_url }}"
+        dest: "{{ mc_dir }}/server.jar"
+        mode: "0644"
+      when: mc_fabric_installer_url is defined
+
+    - name: Set ownership of vanilla server jar (Fabric)
+      file:
+        path: "{{ mc_dir }}/server.jar"
+        owner: "{{ mc_user }}"
+        group: "{{ mc_user }}"
+      when: mc_fabric_installer_url is defined
+
     - name: Render server.properties
       copy:
         dest: "{{ mc_dir }}/server.properties"

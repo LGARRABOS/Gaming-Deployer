@@ -387,14 +387,21 @@ func runAnsibleMinecraft(ctx context.Context, req MinecraftDeploymentRequest, ho
 		extraVars["mc_forge_full_version"] = fullVersion
 	}
 	// For Fabric, resolve installer URL and loader version; Ansible will run the installer (server mode).
+	// Fabric's launcher also needs the vanilla server JAR at server.jar — we pass its URL for Ansible to download.
 	if req.Minecraft.Type == minecraft.TypeFabric && strings.TrimSpace(req.Minecraft.Version) != "" {
-		installerURL, loaderVersion, err := minecraft.ResolveFabricInstallerParams(strings.TrimSpace(req.Minecraft.Version))
+		mcVer := strings.TrimSpace(req.Minecraft.Version)
+		installerURL, loaderVersion, err := minecraft.ResolveFabricInstallerParams(mcVer)
 		if err != nil {
 			return fmt.Errorf("résolution version Fabric: %w", err)
 		}
+		jarURL, err := minecraft.ResolveVanillaServerJarURL(mcVer)
+		if err != nil {
+			return fmt.Errorf("résolution JAR vanilla pour Fabric: %w", err)
+		}
 		extraVars["mc_fabric_installer_url"] = installerURL
-		extraVars["mc_fabric_mc_version"] = strings.TrimSpace(req.Minecraft.Version)
+		extraVars["mc_fabric_mc_version"] = mcVer
 		extraVars["mc_fabric_loader_version"] = loaderVersion
+		extraVars["mc_server_jar_url"] = jarURL
 	}
 
 	extraJSON, err := json.Marshal(extraVars)
