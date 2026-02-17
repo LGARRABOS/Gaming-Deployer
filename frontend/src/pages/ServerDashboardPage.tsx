@@ -23,7 +23,7 @@ interface ServerInfo {
 }
 
 type ServiceStatus = "active" | "inactive" | "failed" | "unknown";
-type TabId = "console" | "config" | "backups" | "players" | "monitoring" | "sftp";
+type TabId = "console" | "config" | "backups" | "players" | "monitoring" | "logs" | "sftp";
 
 /** Valeurs par défaut server.properties (Minecraft) pour affichage et préremplissage */
 const CONFIG_DEFAULTS: Record<string, string> = {
@@ -79,6 +79,8 @@ export const ServerDashboardPage: React.FC = () => {
   const [minecraftInfoLoading, setMinecraftInfoLoading] = useState(false);
   const [playerActionLoading, setPlayerActionLoading] = useState<string | null>(null);
   const [playerActionMessage, setPlayerActionMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+  const [actionLogs, setActionLogs] = useState<{ id: number; ts: string; action: string; details?: string; success: boolean; message?: string }[]>([]);
+  const [actionLogsLoading, setActionLogsLoading] = useState(false);
 
   const { data: monitoringData, loading: monitoringLoading } = useServerMonitoringData(serverId || null);
 
@@ -136,6 +138,21 @@ export const ServerDashboardPage: React.FC = () => {
     }
   }, [serverId]);
 
+  const fetchActionLogs = useCallback(async () => {
+    if (!serverId) return;
+    setActionLogsLoading(true);
+    try {
+      const res = await apiGet<{ ok: boolean; logs?: { id: number; ts: string; action: string; details?: string; success: boolean; message?: string }[] }>(
+        `/api/servers/${serverId}/action-logs`
+      );
+      setActionLogs(res?.logs ?? []);
+    } catch {
+      setActionLogs([]);
+    } finally {
+      setActionLogsLoading(false);
+    }
+  }, [serverId]);
+
   useEffect(() => {
     fetchServer();
   }, [fetchServer]);
@@ -151,6 +168,10 @@ export const ServerDashboardPage: React.FC = () => {
   useEffect(() => {
     if (activeTab === "backups" && serverId) fetchBackups();
   }, [activeTab, serverId, fetchBackups]);
+
+  useEffect(() => {
+    if (activeTab === "logs" && serverId) fetchActionLogs();
+  }, [activeTab, serverId, fetchActionLogs]);
 
   const fetchMinecraftInfo = useCallback(async () => {
     if (!serverId) return;
@@ -201,6 +222,7 @@ export const ServerDashboardPage: React.FC = () => {
         if (res?.ok) {
           setPlayerActionMessage({ type: "ok", text: "Commande exécutée." });
           fetchMinecraftInfo();
+          fetchActionLogs();
         } else {
           setPlayerActionMessage({ type: "error", text: res?.error ?? res?.response ?? "Erreur" });
         }
@@ -225,6 +247,7 @@ export const ServerDashboardPage: React.FC = () => {
         setError(res?.error ?? "Échec de l'action");
       } else {
         setTimeout(fetchStatus, 1500);
+        fetchActionLogs();
       }
     } catch (e: unknown) {
       setError((e as Error).message ?? "Erreur");
@@ -242,6 +265,7 @@ export const ServerDashboardPage: React.FC = () => {
       );
       if (res?.ok) {
         fetchBackups();
+        fetchActionLogs();
       }
     } finally {
       setBackupCreating(false);
@@ -254,6 +278,7 @@ export const ServerDashboardPage: React.FC = () => {
     try {
       await apiDelete(`/api/servers/${serverId}/backup?file=${encodeURIComponent(file)}`);
       fetchBackups();
+      fetchActionLogs();
     } catch (e: unknown) {
       setBackupError((e as Error).message ?? "Erreur lors de la suppression");
     } finally {
@@ -273,6 +298,7 @@ export const ServerDashboardPage: React.FC = () => {
       );
       if (res?.ok) {
         setConfigMessage("Configuration enregistrée.");
+        fetchActionLogs();
       } else {
         setConfigMessage(res?.error ?? "Erreur");
       }
@@ -303,6 +329,7 @@ export const ServerDashboardPage: React.FC = () => {
     { id: "backups", label: "Sauvegardes" },
     { id: "players", label: "Joueurs" },
     { id: "monitoring", label: "Monitoring" },
+    { id: "logs", label: "Logs" },
     { id: "sftp", label: "Connexion SFTP" },
   ];
 
@@ -808,6 +835,76 @@ export const ServerDashboardPage: React.FC = () => {
           >
             <ServerMonitoringCharts data={monitoringData} loading={monitoringLoading} />
           </Suspense>
+        )}
+
+        {activeTab === "logs" && (
+          <section className="card server-panel server-panel--wide">
+            <h2 className="server-panel-title">Logs des actions</h2>
+            <div className="server-logs-actions">
+              <button
+                type="button"
+                className="server-btn server-btn--primary"
+                onClick={() => fetchActionLogs()}
+                disabled={actionLogsLoading}
+              >
+                {actionLogsLoading ? "Chargement…" : "Actualiser"}
+              </button>
+            </div>
+            {actionLogsLoading && actionLogs.length === 0 ? (
+              <p className="server-panel-desc">Chargement des logs…</p>
+            ) : actionLogs.length === 0 ? (
+              <p className="server-panel-desc">Aucune action enregistrée pour le moment.</p>
+            ) : (
+              <div className="server-logs-list-wrap">
+                <table className="server-logs-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Action</th>
+                      <th>Détails</th>
+                      <th>Résultat</th>
+                      <th>Message</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {actionLogs.map((log) => {
+                      const actionLabels: Record<string, string> = {
+                        service_start: "Démarrage du serveur",
+                        service_stop: "Arrêt du serveur",
+                        service_restart: "Redémarrage du serveur",
+                        console_command: "Commande console",
+                        config_update: "Modification configuration",
+                        backup_create: "Création sauvegarde",
+                        backup_delete: "Suppression sauvegarde",
+                      };
+                      const label = actionLabels[log.action] ?? log.action;
+                      const date = (() => {
+                        try {
+                          const d = new Date(log.ts);
+                          return Number.isNaN(d.getTime()) ? log.ts : d.toLocaleString("fr-FR");
+                        } catch {
+                          return log.ts;
+                        }
+                      })();
+                      return (
+                        <tr key={log.id} className={log.success ? "" : "server-logs-row--error"}>
+                          <td className="server-logs-ts">{date}</td>
+                          <td className="server-logs-action">{label}</td>
+                          <td className="server-logs-details">{log.details ?? "—"}</td>
+                          <td>
+                            <span className={log.success ? "success" : "error"}>
+                              {log.success ? "Succès" : "Échec"}
+                            </span>
+                          </td>
+                          <td className="server-logs-message">{log.message ?? "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
         )}
 
         {activeTab === "backups" && (

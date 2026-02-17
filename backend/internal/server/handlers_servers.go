@@ -20,10 +20,23 @@ import (
 	"github.com/gorcon/rcon"
 
 	"github.com/example/proxmox-game-deployer/internal/config"
+	"github.com/example/proxmox-game-deployer/internal/db"
 	"github.com/example/proxmox-game-deployer/internal/deploy"
 	"github.com/example/proxmox-game-deployer/internal/proxmox"
 	"github.com/example/proxmox-game-deployer/internal/sshexec"
 )
+
+// logServerAction enregistre une action effectuée sur le serveur (pour l’onglet Logs).
+func (s *Server) logServerAction(ctx context.Context, deploymentID int64, action, details string, success bool, message string) {
+	successInt := 0
+	if success {
+		successInt = 1
+	}
+	_, _ = s.DB.ExecContext(ctx, `
+		INSERT INTO server_action_logs (deployment_id, ts, action, details, success, message)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, deploymentID, db.Now().Format(time.RFC3339), action, details, successInt, message)
+}
 
 // handleListServers returns Minecraft deployments that completed successfully (server list).
 func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
@@ -184,9 +197,11 @@ func (s *Server) handleServerAction(w http.ResponseWriter, r *http.Request) {
 	command := "sudo systemctl " + action + " minecraft"
 	stdout, stderr, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, command)
 	if err != nil {
+		s.logServerAction(ctx, deploymentID, "service_"+action, action, false, err.Error())
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error(), "stderr": stderr, "stdout": stdout})
 		return
 	}
+	s.logServerAction(ctx, deploymentID, "service_"+action, action, true, stdout)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "stdout": stdout})
 }
 
@@ -232,9 +247,11 @@ func (s *Server) handleServerConsoleCommand(w http.ResponseWriter, r *http.Reque
 
 	resp, err := client.Execute(cmd)
 	if err != nil {
+		s.logServerAction(ctx, deploymentID, "console_command", cmd, false, err.Error())
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+	s.logServerAction(ctx, deploymentID, "console_command", cmd, true, resp)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "response": resp})
 }
 
@@ -573,10 +590,12 @@ func (s *Server) handleUpdateServerConfig(w http.ResponseWriter, r *http.Request
 	merged := mergeServerProperties(current, body.Properties)
 	cmd := execCommandWithStdin(ctx, ip, sshUser, keyPath, "sudo tee "+mcDir+"/server.properties > /dev/null", merged)
 	if err := cmd.Run(); err != nil {
+		s.logServerAction(ctx, deploymentID, "config_update", "", false, err.Error())
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	_, _, _ = sshexec.RunCommand(ctx, ip, sshUser, keyPath, "sudo chown "+mcUser+":"+mcUser+" "+mcDir+"/server.properties")
+	s.logServerAction(ctx, deploymentID, "config_update", "", true, "Configuration enregistrée")
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -903,9 +922,11 @@ func (s *Server) handleCreateBackup(w http.ResponseWriter, r *http.Request) {
 	cmd := fmt.Sprintf("sudo -u %s sh -c 'mkdir -p %s/backups && tar czf %s -C %s --exclude=%s/backups %s'", mcUser, mcDir, backupPath, parent, base, base)
 	stdout, stderr, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, cmd)
 	if err != nil {
+		s.logServerAction(ctx, deploymentID, "backup_create", "", false, err.Error())
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error(), "stderr": stderr, "stdout": stdout})
 		return
 	}
+	s.logServerAction(ctx, deploymentID, "backup_create", backupName, true, "Sauvegarde créée")
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "file": backupName})
 }
 
@@ -975,10 +996,76 @@ func (s *Server) handleDeleteBackup(w http.ResponseWriter, r *http.Request) {
 	fullPath := mcDir + "/backups/" + file
 	cmd := "sudo rm -f " + fullPath
 	if _, _, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, cmd); err != nil {
+		s.logServerAction(ctx, deploymentID, "backup_delete", file, false, err.Error())
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+	s.logServerAction(ctx, deploymentID, "backup_delete", file, true, "Sauvegarde supprimée")
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// handleServerActionLogs returns the action log entries for a server (for the Logs tab).
+func (s *Server) handleServerActionLogs(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	// Verify server exists
+	row := s.DB.Sql().QueryRowContext(ctx, `
+		SELECT id FROM deployments WHERE id = ? AND game = ? AND status = ?
+	`, deploymentID, "minecraft", string(deploy.StatusSuccess))
+	var id int64
+	if err := row.Scan(&id); err != nil {
+		if err == sql.ErrNoRows {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	rows, err := s.DB.Sql().QueryContext(ctx, `
+		SELECT id, ts, action, details, success, message
+		FROM server_action_logs
+		WHERE deployment_id = ?
+		ORDER BY ts DESC
+		LIMIT 500
+	`, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	type logEntry struct {
+		ID      int64   `json:"id"`
+		Ts      string  `json:"ts"`
+		Action  string  `json:"action"`
+		Details string  `json:"details,omitempty"`
+		Success bool    `json:"success"`
+		Message string  `json:"message,omitempty"`
+	}
+	var list []logEntry
+	for rows.Next() {
+		var e logEntry
+		var ts string
+		var details, message sql.NullString
+		var successInt int
+		if err := rows.Scan(&e.ID, &ts, &e.Action, &details, &successInt, &message); err != nil {
+			continue
+		}
+		e.Ts = ts
+		if details.Valid {
+			e.Details = details.String
+		}
+		e.Success = successInt != 0
+		if message.Valid {
+			e.Message = message.String
+		}
+		list = append(list, e)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "logs": list})
 }
 
 // resolveFilesPath validates path (relative to mc_dir) and returns full path on VM. Path must stay under mc_dir.

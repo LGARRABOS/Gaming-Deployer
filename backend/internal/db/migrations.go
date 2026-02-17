@@ -78,6 +78,18 @@ func (d *DB) Migrate(ctx context.Context) error {
 			FOREIGN KEY(deployment_id) REFERENCES deployments(id) ON DELETE CASCADE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_monitoring_samples_deployment_ts ON monitoring_samples(deployment_id, ts);`,
+		// server_action_logs: journal des actions sur un serveur (start, stop, config, backup, commande RCON, etc.)
+		`CREATE TABLE IF NOT EXISTS server_action_logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			deployment_id INTEGER NOT NULL,
+			ts DATETIME NOT NULL,
+			action TEXT NOT NULL,
+			details TEXT,
+			success INTEGER NOT NULL,
+			message TEXT,
+			FOREIGN KEY(deployment_id) REFERENCES deployments(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_server_action_logs_deployment_ts ON server_action_logs(deployment_id, ts DESC);`,
 	}
 
 	for i, stmt := range stmts {

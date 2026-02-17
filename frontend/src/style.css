@@ -819,6 +819,67 @@ input[type="checkbox"] {
   font-size: 0.9rem;
 }
 
+/* Logs des actions */
+.server-logs-actions {
+  margin-bottom: 1.25rem;
+}
+
+.server-logs-list-wrap {
+  overflow-x: auto;
+  margin-top: 0.5rem;
+}
+
+.server-logs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.server-logs-table th,
+.server-logs-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #1e293b;
+}
+
+.server-logs-table th {
+  color: #94a3b8;
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.server-logs-table tr.server-logs-row--error td {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.server-logs-ts {
+  white-space: nowrap;
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+.server-logs-action {
+  font-weight: 500;
+}
+
+.server-logs-details {
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.server-logs-message {
+  font-size: 0.85rem;
+  color: #cbd5e1;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .server-players-actions {
   margin-bottom: 1rem;
 }
