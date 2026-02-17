@@ -22,6 +22,7 @@ import (
 	"github.com/example/proxmox-game-deployer/internal/config"
 	"github.com/example/proxmox-game-deployer/internal/db"
 	"github.com/example/proxmox-game-deployer/internal/deploy"
+	"github.com/example/proxmox-game-deployer/internal/minecraft"
 	"github.com/example/proxmox-game-deployer/internal/proxmox"
 	"github.com/example/proxmox-game-deployer/internal/sshexec"
 )
@@ -1066,6 +1067,78 @@ func (s *Server) handleServerActionLogs(w http.ResponseWriter, r *http.Request) 
 		list = append(list, e)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "logs": list})
+}
+
+// handleServerMigrate migrates the Minecraft server to another vanilla version (replaces server.jar, keeps world and config).
+func (s *Server) handleServerMigrate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	idStr := chi.URLParam(r, "id")
+	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	var body struct {
+		Version string `json:"version"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	version := strings.TrimSpace(body.Version)
+	if version == "" {
+		http.Error(w, "version is required", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	jarURL, err := minecraft.ResolveVanillaServerJarURL(version)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	ip, sshUser, err := s.getServerSSHTarget(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	mcDir, mcUser, err := s.getServerMinecraftPath(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	keyPath := sshexec.KeyPath()
+
+	// 1. Stop the service
+	if stdout, stderr, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, "sudo systemctl stop minecraft"); err != nil {
+		s.logServerAction(ctx, deploymentID, "migrate", version, false, "arrêt du service: "+err.Error())
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "Échec arrêt du serveur: " + err.Error(), "stderr": stderr, "stdout": stdout})
+		return
+	}
+
+	// 2. Backup current server.jar
+	_, _, _ = sshexec.RunCommand(ctx, ip, sshUser, keyPath, fmt.Sprintf("sudo cp %s/server.jar %s/server.jar.bak 2>/dev/null || true", mcDir, mcDir))
+
+	// 3. Download new jar (use single quotes around URL to avoid shell interpretation)
+	downloadCmd := fmt.Sprintf("sudo curl -fsSL -o %s/server.jar.new '%s' && sudo mv %s/server.jar.new %s/server.jar && sudo chown %s:%s %s/server.jar", mcDir, jarURL, mcDir, mcDir, mcUser, mcUser, mcDir)
+	stdout, stderr, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, downloadCmd)
+	if err != nil {
+		s.logServerAction(ctx, deploymentID, "migrate", version, false, "téléchargement: "+err.Error())
+		_, _, _ = sshexec.RunCommand(ctx, ip, sshUser, keyPath, "sudo systemctl start minecraft")
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "Échec téléchargement du nouveau jar: " + err.Error(), "stderr": stderr, "stdout": stdout})
+		return
+	}
+
+	// 4. Start the service
+	if _, stderr, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, "sudo systemctl start minecraft"); err != nil {
+		s.logServerAction(ctx, deploymentID, "migrate", version, false, "redémarrage: "+err.Error())
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "Migration appliquée mais redémarrage échoué: " + err.Error(), "stderr": stderr, "stdout": stdout})
+		return
+	}
+	s.logServerAction(ctx, deploymentID, "migrate", version, true, "Migration vers "+version+" effectuée")
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "Migration vers " + version + " effectuée. Le monde et la configuration sont inchangés."})
 }
 
 // resolveFilesPath validates path (relative to mc_dir) and returns full path on VM. Path must stay under mc_dir.

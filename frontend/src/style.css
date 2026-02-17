@@ -880,6 +880,35 @@ input[type="checkbox"] {
   text-overflow: ellipsis;
 }
 
+.server-migration-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.server-migration-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.server-migration-form label span {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.server-migration-form select {
+  min-width: 140px;
+  padding: 0.45rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 0.9rem;
+}
+
 .server-players-actions {
   margin-bottom: 1rem;
 }

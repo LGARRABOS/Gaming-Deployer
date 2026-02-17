@@ -23,7 +23,7 @@ interface ServerInfo {
 }
 
 type ServiceStatus = "active" | "inactive" | "failed" | "unknown";
-type TabId = "console" | "config" | "backups" | "players" | "monitoring" | "logs" | "sftp";
+type TabId = "console" | "config" | "backups" | "players" | "monitoring" | "logs" | "migration" | "sftp";
 
 /** Valeurs par défaut server.properties (Minecraft) pour affichage et préremplissage */
 const CONFIG_DEFAULTS: Record<string, string> = {
@@ -81,6 +81,11 @@ export const ServerDashboardPage: React.FC = () => {
   const [playerActionMessage, setPlayerActionMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [actionLogs, setActionLogs] = useState<{ id: number; ts: string; action: string; details?: string; success: boolean; message?: string }[]>([]);
   const [actionLogsLoading, setActionLogsLoading] = useState(false);
+  const [migrateVersions, setMigrateVersions] = useState<string[]>([]);
+  const [migrateVersionsLoading, setMigrateVersionsLoading] = useState(false);
+  const [migrateTarget, setMigrateTarget] = useState<string>("");
+  const [migrateLoading, setMigrateLoading] = useState(false);
+  const [migrateMessage, setMigrateMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
 
   const { data: monitoringData, loading: monitoringLoading } = useServerMonitoringData(serverId || null);
 
@@ -172,6 +177,48 @@ export const ServerDashboardPage: React.FC = () => {
   useEffect(() => {
     if (activeTab === "logs" && serverId) fetchActionLogs();
   }, [activeTab, serverId, fetchActionLogs]);
+
+  const fetchMigrateVersions = useCallback(async () => {
+    setMigrateVersionsLoading(true);
+    try {
+      const res = await apiGet<{ versions: string[]; latest: string }>("/api/minecraft/versions");
+      if (res?.versions?.length) {
+        setMigrateVersions(res.versions);
+        setMigrateTarget((v) => v || res.latest || res.versions[0]);
+      }
+    } catch {
+      setMigrateVersions([]);
+    } finally {
+      setMigrateVersionsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "migration") fetchMigrateVersions();
+  }, [activeTab, fetchMigrateVersions]);
+
+  const onMigrate = useCallback(async () => {
+    if (!serverId || !migrateTarget || migrateLoading) return;
+    setMigrateLoading(true);
+    setMigrateMessage(null);
+    try {
+      const res = await apiPost<{ ok: boolean; error?: string; message?: string }>(
+        `/api/servers/${serverId}/migrate`,
+        { version: migrateTarget }
+      );
+      if (res?.ok) {
+        setMigrateMessage({ type: "ok", text: res.message ?? "Migration effectuée." });
+        fetchStatus();
+        fetchActionLogs();
+      } else {
+        setMigrateMessage({ type: "error", text: res?.error ?? "Erreur lors de la migration." });
+      }
+    } catch (e: unknown) {
+      setMigrateMessage({ type: "error", text: (e as Error).message ?? "Erreur lors de la migration." });
+    } finally {
+      setMigrateLoading(false);
+    }
+  }, [serverId, migrateTarget, migrateLoading, fetchStatus, fetchActionLogs]);
 
   const fetchMinecraftInfo = useCallback(async () => {
     if (!serverId) return;
@@ -330,6 +377,7 @@ export const ServerDashboardPage: React.FC = () => {
     { id: "players", label: "Joueurs" },
     { id: "monitoring", label: "Monitoring" },
     { id: "logs", label: "Logs" },
+    { id: "migration", label: "Migration" },
     { id: "sftp", label: "Connexion SFTP" },
   ];
 
@@ -856,6 +904,7 @@ export const ServerDashboardPage: React.FC = () => {
                         config_update: "Modification configuration",
                         backup_create: "Création sauvegarde",
                         backup_delete: "Suppression sauvegarde",
+                        migrate: "Migration de version",
                       };
                       const label = actionLabels[log.action] ?? log.action;
                       const date = (() => {
@@ -883,6 +932,50 @@ export const ServerDashboardPage: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === "migration" && (
+          <section className="card server-panel server-panel--wide">
+            <h2 className="server-panel-title">Migration de version</h2>
+            <p className="server-panel-desc">
+              Passez le serveur à une autre version vanilla (1.x.x) sans perdre le monde ni la configuration. Le serveur sera arrêté brièvement pendant le remplacement du fichier server.jar.
+            </p>
+            {migrateVersionsLoading ? (
+              <p className="server-panel-desc">Chargement des versions…</p>
+            ) : migrateVersions.length === 0 ? (
+              <p className="server-panel-desc">Impossible de charger la liste des versions.</p>
+            ) : (
+              <>
+                <div className="server-migration-form">
+                  <label>
+                    <span>Version cible (vanilla)</span>
+                    <select
+                      value={migrateTarget || migrateVersions[0]}
+                      onChange={(e) => setMigrateTarget(e.target.value)}
+                      disabled={migrateLoading}
+                    >
+                      {migrateVersions.map((v) => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="server-btn server-btn--primary"
+                    onClick={onMigrate}
+                    disabled={migrateLoading || !migrateTarget}
+                  >
+                    {migrateLoading ? "Migration en cours…" : "Migrer vers cette version"}
+                  </button>
+                </div>
+                {migrateMessage && (
+                  <p className={migrateMessage.type === "ok" ? "success server-panel-error" : "error server-panel-error"}>
+                    {migrateMessage.text}
+                  </p>
+                )}
+              </>
             )}
           </section>
         )}
