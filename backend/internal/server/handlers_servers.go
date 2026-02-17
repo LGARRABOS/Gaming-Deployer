@@ -1189,7 +1189,10 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "entries": []any{}})
 		return
 	}
-	var entries []map[string]any
+	var (
+		entries []map[string]any
+		seen    = make(map[string]struct{})
+	)
 	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -1203,6 +1206,10 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 		if name == "" || name == "." || name == ".." {
 			continue
 		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
 		size, _ := strconv.ParseInt(parts[1], 10, 64)
 		mtime, _ := strconv.ParseInt(parts[2], 10, 64)
 		typ := "f"

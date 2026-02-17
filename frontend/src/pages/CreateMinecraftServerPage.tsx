@@ -39,6 +39,7 @@ export const CreateMinecraftServerPage: React.FC = () => {
   const [fabricVersions, setFabricVersions] = useState<{ mc_version: string; loader_version: string; full_version: string }[]>([]);
   const [versionsLoading, setVersionsLoading] = useState(true);
   const [minecraftMode, setMinecraftMode] = useState<"config" | "modpack">("config");
+  const [modpackUrlError, setModpackUrlError] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>({
     name: "",
     cores: 2,
@@ -124,8 +125,35 @@ export const CreateMinecraftServerPage: React.FC = () => {
   const parseList = (value: string): string[] =>
     value.split(",").map((v) => v.trim()).filter(Boolean);
 
+  const validateModpackUrl = (value: string): string | null => {
+    const url = value.trim();
+    if (!url) return null;
+    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+      return "Le lien doit commencer par http:// ou https://.";
+    }
+    try {
+      const u = new URL(url);
+      const host = u.hostname.toLowerCase();
+      if (host.includes("curseforge.com") && !u.pathname.toLowerCase().endsWith(".zip")) {
+        return "Pour CurseForge, utilise le lien direct vers le fichier .zip (CDN), pas l’URL /download/ de la page.";
+      }
+    } catch {
+      return "Le lien saisi n’est pas une URL valide.";
+    }
+    return null;
+  };
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Validation côté client du lien de modpack avant d'appeler l'API
+    if (minecraftMode === "modpack" && form.minecraft.modpack_url) {
+      const msg = validateModpackUrl(form.minecraft.modpack_url);
+      if (msg) {
+        setModpackUrlError(msg);
+        setError(msg);
+        return;
+      }
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -316,9 +344,16 @@ export const CreateMinecraftServerPage: React.FC = () => {
                   <span>URL directe du server pack (ZIP)</span>
                   <input
                     value={form.minecraft.modpack_url ?? ""}
-                    onChange={(e) => updateMinecraft("modpack_url", e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      updateMinecraft("modpack_url", value);
+                      setModpackUrlError(validateModpackUrl(value));
+                    }}
                     placeholder="https://..."
                   />
+                  {modpackUrlError && (
+                    <p className="error" style={{ marginTop: "0.4rem" }}>{modpackUrlError}</p>
+                  )}
                 </label>
               </>
             )}

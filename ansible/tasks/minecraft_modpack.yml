@@ -27,6 +27,15 @@
     recurse: true
   when: mc_modpack_url is defined
 
+- name: Check client-pack markers (manifest.json / overrides)
+  stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ mc_dir }}/manifest.json"
+    - "{{ mc_dir }}/overrides"
+  register: mc_client_pack_markers
+  when: mc_modpack_url is defined
+
 - name: Ensure server.properties uses deployment settings (modpack)
   lineinfile:
     path: "{{ mc_dir }}/server.properties"
@@ -65,6 +74,21 @@
     path: "{{ mc_dir }}/server.jar"
   register: mc_server_jar
   when: mc_modpack_url is defined
+
+- name: Fail early if modpack looks like a client pack (manifest.json + overrides, aucun serveur présent)
+  fail:
+    msg: "Le ZIP fourni ressemble à un modpack client (manifest.json + overrides) et ne contient pas de serveur (start.sh / startserver.sh / run.sh / server.jar). Utilise un server pack CurseForge."
+  when:
+    - mc_modpack_url is defined
+    - mc_client_pack_markers is defined
+    - (mc_client_pack_markers.results[0].stat.exists | default(false))
+    - (mc_client_pack_markers.results[1].stat.exists | default(false))
+    - (mc_server_jar is not defined or not (mc_server_jar.stat.exists | default(false)))
+    - (mc_launch_scripts is not defined or (
+        not (mc_launch_scripts.results[0].stat.exists | default(false)) and
+        not (mc_launch_scripts.results[1].stat.exists | default(false)) and
+        not (mc_launch_scripts.results[2].stat.exists | default(false))
+      ))
 
 - name: Download vanilla server jar when missing (required by some server packs)
   get_url:
