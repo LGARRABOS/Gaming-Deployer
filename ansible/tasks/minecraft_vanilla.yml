@@ -1,0 +1,13 @@
+- name: Download Minecraft server jar (vanilla)
+  get_url:
+    url: "{{ mc_server_jar_url | default('https://piston-data.mojang.com/v1/objects/64bb6d763bed0a9f1d632ec347938594144943ed/server.jar') }}"
+    dest: "{{ mc_dir }}/server.jar"
+    mode: "0644"
+  when: mc_forge_installer_url is not defined and mc_fabric_installer_url is not defined
+
+- name: Set ownership of server jar
+  file:
+    path: "{{ mc_dir }}/server.jar"
+    owner: "{{ mc_user }}"
+    group: "{{ mc_user }}"
+  when: mc_forge_installer_url is not defined and mc_fabric_installer_url is not defined

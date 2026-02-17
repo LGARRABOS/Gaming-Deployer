@@ -1,0 +1,69 @@
+- name: Create systemd service (vanilla)
+  copy:
+    dest: /etc/systemd/system/{{ mc_service_name }}.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Minecraft Server
+      After=network.target
+
+      [Service]
+      WorkingDirectory={{ mc_dir }}
+      User={{ mc_user }}
+      Group={{ mc_user }}
+      Restart=always
+      ExecStart=/usr/bin/java -Xmx{{ mc_jvm_heap }} {{ mc_jvm_flags }} -jar server.jar nogui
+
+      [Install]
+      WantedBy=multi-user.target
+  when: mc_forge_installer_url is not defined and mc_fabric_installer_url is not defined
+
+- name: Create systemd service (Forge)
+  copy:
+    dest: /etc/systemd/system/{{ mc_service_name }}.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Minecraft Forge Server
+      After=network.target
+
+      [Service]
+      WorkingDirectory={{ mc_dir }}
+      User={{ mc_user }}
+      Group={{ mc_user }}
+      Restart=always
+      ExecStart=/bin/bash run.sh nogui
+
+      [Install]
+      WantedBy=multi-user.target
+  when: mc_forge_installer_url is defined
+
+- name: Create systemd service (Fabric)
+  copy:
+    dest: /etc/systemd/system/{{ mc_service_name }}.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Minecraft Fabric Server
+      After=network.target
+
+      [Service]
+      WorkingDirectory={{ mc_dir }}
+      User={{ mc_user }}
+      Group={{ mc_user }}
+      Restart=always
+      ExecStart=/usr/bin/java -Xmx{{ mc_jvm_heap }} {{ mc_jvm_flags | default('') }} -jar fabric-server-launch.jar nogui
+
+      [Install]
+      WantedBy=multi-user.target
+  when: mc_fabric_installer_url is defined
+
+- name: Reload systemd
+  systemd:
+    daemon_reload: true
+
+- name: Enable and start minecraft service
+  systemd:
+    name: "{{ mc_service_name }}"
+    enabled: true
+    state: started

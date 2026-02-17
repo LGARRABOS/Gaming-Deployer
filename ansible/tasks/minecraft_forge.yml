@@ -1,0 +1,37 @@
+- name: Download Forge installer
+  get_url:
+    url: "{{ mc_forge_installer_url }}"
+    dest: "{{ mc_dir }}/forge-installer.jar"
+    mode: "0644"
+  when: mc_forge_installer_url is defined
+
+- name: Set ownership of Forge installer
+  file:
+    path: "{{ mc_dir }}/forge-installer.jar"
+    owner: "{{ mc_user }}"
+    group: "{{ mc_user }}"
+  when: mc_forge_installer_url is defined
+
+# Run as mc_user via runuser to avoid Ansible become temp-file chmod bug when
+# the target user's home has ACLs (chmod gets invalid mode like A+user:mcadmin:rx:allow).
+- name: Run Forge installer (install server)
+  shell: runuser -u "{{ mc_user }}" -- java -jar forge-installer.jar --installServer
+  args:
+    chdir: "{{ mc_dir }}"
+    creates: "{{ mc_dir }}/run.sh"
+  when: mc_forge_installer_url is defined
+
+- name: Make run.sh executable (Forge)
+  file:
+    path: "{{ mc_dir }}/run.sh"
+    mode: "0755"
+  when: mc_forge_installer_url is defined
+
+- name: Create user_jvm_args.txt for Forge (heap and extra flags)
+  copy:
+    dest: "{{ mc_dir }}/user_jvm_args.txt"
+    content: "-Xmx{{ mc_jvm_heap }} {{ mc_jvm_flags | default('') }}"
+    owner: "{{ mc_user }}"
+    group: "{{ mc_user }}"
+    mode: "0644"
+  when: mc_forge_installer_url is defined
