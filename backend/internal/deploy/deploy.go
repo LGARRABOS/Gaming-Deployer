@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -414,9 +415,17 @@ func runAnsibleMinecraft(ctx context.Context, req MinecraftDeploymentRequest, ho
 		env = append(env, "ANSIBLE_PRIVATE_KEY_FILE="+keyPath)
 	}
 	cmd.Env = env
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		out := strings.TrimSpace(stdout.String() + "\n" + stderr.String())
+		if out != "" {
+			return fmt.Errorf("%w\n\nSortie Ansible:\n%s", err, out)
+		}
+		return err
+	}
+	return nil
 }
 
 // generatePassword crée un mot de passe aléatoire simple (a-zA-Z0-9).
