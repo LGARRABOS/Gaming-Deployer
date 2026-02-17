@@ -153,12 +153,13 @@
         group: "{{ mc_user }}"
         mode: "0644"
 
+    # Run as mc_user via runuser to avoid Ansible become temp-file chmod bug when
+    # the target user's home has ACLs (chmod gets invalid mode like A+user:mcadmin:rx:allow).
     - name: Run Forge installer (install server)
-      command: java -jar forge-installer.jar --installServer
+      shell: runuser -u "{{ mc_user }}" -- java -jar forge-installer.jar --installServer
       args:
         chdir: "{{ mc_dir }}"
         creates: "{{ mc_dir }}/run.sh"
-      become_user: "{{ mc_user }}"
       when: mc_forge_installer_url is defined
 
     - name: Make run.sh executable (Forge)
