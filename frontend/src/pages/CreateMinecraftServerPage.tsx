@@ -207,7 +207,6 @@ export const CreateMinecraftServerPage: React.FC = () => {
               className={`deployment-detail-tab ${minecraftMode === "modpack" ? "deployment-detail-tab--active" : ""}`}
               onClick={() => {
                 setMinecraftMode("modpack");
-                setModpackError(null);
               }}
             >
               Modpack (CurseForge)
