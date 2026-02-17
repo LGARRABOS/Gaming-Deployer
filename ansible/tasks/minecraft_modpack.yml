@@ -55,13 +55,10 @@
 
 - name: Make launch scripts executable
   file:
-    path: "{{ item }}"
+    path: "{{ item.stat.path }}"
     mode: "0755"
-  loop:
-    - "{{ mc_dir }}/run.sh"
-    - "{{ mc_dir }}/start.sh"
-    - "{{ mc_dir }}/startserver.sh"
-  when: mc_modpack_url is defined
+  loop: "{{ mc_launch_scripts.results | default([]) }}"
+  when: mc_modpack_url is defined and (item.stat.exists | default(false))
 
 - name: Check if server.jar exists (Mojang jar)
   stat:
