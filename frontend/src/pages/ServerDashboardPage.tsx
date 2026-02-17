@@ -420,16 +420,6 @@ export const ServerDashboardPage: React.FC = () => {
               <h3 className="server-config-section">Réseau et général</h3>
               <div className="server-config-grid">
                 <label>
-                  <span>Port du serveur</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={65535}
-                    value={configProps["server-port"] ?? CONFIG_DEFAULTS["server-port"]}
-                    onChange={(e) => setConfigProps((p) => ({ ...p, "server-port": e.target.value }))}
-                  />
-                </label>
-                <label>
                   <span>MOTD (message d’accueil)</span>
                   <input
                     value={configProps["motd"] ?? CONFIG_DEFAULTS.motd}
@@ -454,16 +444,6 @@ export const ServerDashboardPage: React.FC = () => {
                     onChange={(e) =>
                       setConfigProps((p) => ({ ...p, "level-name": e.target.value }))
                     }
-                  />
-                </label>
-                <label>
-                  <span>Seed du monde</span>
-                  <input
-                    value={configProps["level-seed"] ?? ""}
-                    onChange={(e) =>
-                      setConfigProps((p) => ({ ...p, "level-seed": e.target.value }))
-                    }
-                    placeholder="vide = aléatoire"
                   />
                 </label>
                 <label>
