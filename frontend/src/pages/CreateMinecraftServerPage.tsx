@@ -265,7 +265,7 @@ export const CreateMinecraftServerPage: React.FC = () => {
                   >
                     {fabricVersions.map((f) => (
                       <option key={f.full_version} value={f.mc_version}>
-                        {f.mc_version} (Fabric {f.loader_version})
+                        {f.mc_version}
                       </option>
                     ))}
                   </select>

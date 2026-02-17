@@ -17,6 +17,17 @@ interface DeploymentRecord {
   updated_at: string;
 }
 
+function getMinecraftPortFromRequest(requestJson: string): number {
+  try {
+    const req = JSON.parse(requestJson) as { minecraft?: { port?: number } };
+    const port = req?.minecraft?.port;
+    if (typeof port === "number" && port >= 1 && port <= 65535) return port;
+  } catch {
+    // ignore
+  }
+  return 25565;
+}
+
 const statusLabel: Record<string, string> = {
   queued: "En attente",
   running: "En cours",
@@ -153,6 +164,41 @@ export const DeploymentDetailsPage: React.FC = () => {
           <p className="error">{deployment.error_message}</p>
         </div>
       )}
+
+      <div className="card page-panel deployment-network-info">
+        <h2 className="page-panel-title">Connexion au serveur Minecraft</h2>
+        <p className="page-panel-desc">
+          IP et port à ouvrir sur votre box / routeur pour permettre les connexions depuis Internet.
+        </p>
+        <dl className="deployment-network-dl">
+          <dt>IP de la VM</dt>
+          <dd>
+            {deployment.ip_address ? (
+              <>
+                <code>{deployment.ip_address}</code>
+                <button
+                  type="button"
+                  className="btn-copy"
+                  onClick={() => navigator.clipboard.writeText(deployment.ip_address!)}
+                  title="Copier l’IP"
+                >
+                  Copier
+                </button>
+              </>
+            ) : (
+              <span className="deployment-network-pending">
+                {deployment.status === "running" || deployment.status === "queued"
+                  ? "En attente (affichée à la fin du déploiement)"
+                  : "—"}
+              </span>
+            )}
+          </dd>
+          <dt>Port du serveur Minecraft</dt>
+          <dd>
+            <code>{getMinecraftPortFromRequest(deployment.request_json)}</code>
+          </dd>
+        </dl>
+      </div>
 
       {deployment.status === "success" && (
         <div className="card page-panel">
