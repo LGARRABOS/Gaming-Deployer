@@ -16,6 +16,131 @@ interface ConsoleLine {
   error?: boolean;
 }
 
+type LogSegment =
+  | { type: "timestamp"; text: string }
+  | { type: "level"; level: string; text: string }
+  | { type: "message"; text: string };
+
+/** Parse une ligne de log Minecraft [HH:MM:SS] [Thread/LEVEL]: message pour le coloriage */
+function parseLogLine(line: string): LogSegment[] {
+  const parts: LogSegment[] = [];
+  // [12:34:56] [Server thread/INFO]: message
+  const timeMatch = line.match(/^(\[\d{2}:\d{2}:\d{2}\])/);
+  let rest = line;
+  if (timeMatch) {
+    parts.push({ type: "timestamp", text: timeMatch[1] });
+    rest = rest.slice(timeMatch[1].length).replace(/^\s+/, "");
+  }
+  const levelMatch = rest.match(/^(\[[^\]]+\/(INFO|WARN|ERROR|DEBUG)\]):\s*/);
+  if (levelMatch) {
+    parts.push({ type: "level", level: levelMatch[2], text: levelMatch[1] + ": " });
+    rest = rest.slice(levelMatch[0].length);
+  }
+  if (rest.length > 0) {
+    parts.push({ type: "message", text: rest });
+  }
+  return parts;
+}
+
+/** Convertit les codes ANSI en spans HTML colorés (si le flux en contient) */
+function ansiToSpans(text: string): React.ReactNode[] {
+  const ansiRegex = /\x1b\[([0-9;]*)m/g;
+  const defaultColor = "#94a3b8";
+  const ansiColors: Record<number, string> = {
+    30: "#1e293b",
+    31: "#f87171",
+    32: "#4ade80",
+    33: "#facc15",
+    34: "#60a5fa",
+    35: "#c084fc",
+    36: "#22d3ee",
+    37: "#e2e8f0",
+    90: "#64748b",
+    91: "#f87171",
+    92: "#4ade80",
+    93: "#facc15",
+    94: "#60a5fa",
+    95: "#c084fc",
+    96: "#22d3ee",
+    97: "#f1f5f9",
+  };
+  let lastColor = defaultColor;
+  const nodes: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = ansiRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(
+        <span key={nodes.length} style={{ color: lastColor }}>
+          {text.slice(lastIndex, match.index)}
+        </span>
+      );
+    }
+    const codes = match[1] ? match[1].split(";").map(Number) : [0];
+    for (const code of codes) {
+      if (code === 0) lastColor = defaultColor;
+      else if (ansiColors[code]) lastColor = ansiColors[code];
+    }
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    nodes.push(
+      <span key={nodes.length} style={{ color: lastColor }}>
+        {text.slice(lastIndex)}
+      </span>
+    );
+  }
+  return nodes.length > 0 ? nodes : [text];
+}
+
+/** Affiche une ligne de console avec couleurs (format Minecraft + ANSI) */
+function ConsoleLineContent({ text, forceError }: { text: string; forceError?: boolean }) {
+  if (forceError) {
+    return <span className="server-console-segment server-console-segment--error">{text || "\u00A0"}</span>;
+  }
+  const hasAnsi = /\x1b\[[0-9;]*m/.test(text);
+  if (hasAnsi) {
+    return <>{ansiToSpans(text)}</>;
+  }
+  const segments = parseLogLine(text);
+  if (segments.length === 0) {
+    return <span className="server-console-segment">{text || "\u00A0"}</span>;
+  }
+  return (
+    <>
+      {segments.map((seg, i) => {
+        if (seg.type === "timestamp") {
+          return (
+            <span key={i} className="server-console-segment server-console-segment--ts">
+              {seg.text}
+            </span>
+          );
+        }
+        if (seg.type === "level") {
+          const levelClass =
+            seg.level === "ERROR"
+              ? "server-console-segment--level-error"
+              : seg.level === "WARN"
+                ? "server-console-segment--level-warn"
+                : seg.level === "DEBUG"
+                  ? "server-console-segment--level-debug"
+                  : "server-console-segment--level-info";
+          return (
+            <span key={i} className={`server-console-segment ${levelClass}`}>
+              {seg.text}
+            </span>
+          );
+        }
+        return (
+          <span key={i} className="server-console-segment server-console-segment--msg">
+            {seg.text}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
 export const ServerConsole: React.FC<Props> = ({ serverId }) => {
   const [lines, setLines] = useState<ConsoleLine[]>([]);
   const [status, setStatus] = useState<"idle" | "connecting" | "connected" | "error">("idle");
@@ -130,18 +255,10 @@ export const ServerConsole: React.FC<Props> = ({ serverId }) => {
         )}
         {lines.map((line, i) => {
           let cls = "server-console-line";
-          if (line.error) {
-            cls += " server-console-line--error";
-          } else if (line.text.includes("[Server thread/INFO]") || line.text.includes("/INFO]:")) {
-            cls += " server-console-line--info";
-          } else if (line.text.includes("/WARN]") || line.text.includes("/WARNING]")) {
-            cls += " server-console-line--warn";
-          } else if (line.text.includes("/ERROR]") || line.text.includes("[Server thread/ERROR]")) {
-            cls += " server-console-line--error";
-          }
+          if (line.error) cls += " server-console-line--error";
           return (
             <div key={i} className={cls}>
-              {line.text || "\u00A0"}
+              <ConsoleLineContent text={line.text} forceError={line.error} />
             </div>
           );
         })}

@@ -1394,12 +1394,41 @@ input[type="checkbox"] {
   font-weight: 500;
 }
 
-.server-console-line--info {
-  color: #e2e8f0;
+/* Segments colorés (timestamp, niveau, message) */
+.server-console-segment--ts {
+  color: #64748b;
+  margin-right: 0.25em;
 }
 
-.server-console-line--warn {
+.server-console-segment--level-info {
+  color: #4ade80;
+  font-weight: 500;
+  margin-right: 0.15em;
+}
+
+.server-console-segment--level-warn {
   color: #facc15;
+  font-weight: 500;
+  margin-right: 0.15em;
+}
+
+.server-console-segment--level-error {
+  color: #f87171;
+  font-weight: 600;
+  margin-right: 0.15em;
+}
+
+.server-console-segment--level-debug {
+  color: #a78bfa;
+  margin-right: 0.15em;
+}
+
+.server-console-segment--msg {
+  color: #cbd5e1;
+}
+
+.server-console-segment--error {
+  color: #f87171;
 }
 
 .server-console-placeholder {
