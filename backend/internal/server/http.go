@@ -72,6 +72,7 @@ func New(ctx context.Context, dbPath string) (*Server, error) {
 			r.Post("/setup/ssh-key/regenerate", s.handleRegenerateSSHKey)
 			r.Get("/settings/curseforge", s.handleGetCurseForgeSettings)
 			r.Post("/settings/curseforge", s.handleUpdateCurseForgeSettings)
+			r.Post("/settings/curseforge/test", s.handleTestCurseForgeAPIKey)
 			r.Get("/curseforge/modpacks/search", s.handleCurseForgeSearchModpacks)
 			r.Get("/curseforge/modpacks/{id}/server-packs", s.handleCurseForgeListServerPacks)
 			r.Get("/minecraft/versions", s.handleMinecraftVersions)

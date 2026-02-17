@@ -26,6 +26,8 @@ export const SettingsPage: React.FC = () => {
   const [curseForgeKeySet, setCurseForgeKeySet] = useState<boolean | null>(null);
   const [curseForgeSaving, setCurseForgeSaving] = useState(false);
   const [curseForgeMessage, setCurseForgeMessage] = useState<string | null>(null);
+  const [curseForgeTesting, setCurseForgeTesting] = useState(false);
+  const [curseForgeTestResult, setCurseForgeTestResult] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,6 +121,7 @@ export const SettingsPage: React.FC = () => {
   const onSaveCurseForgeKey = async () => {
     setCurseForgeSaving(true);
     setCurseForgeMessage(null);
+    setCurseForgeTestResult(null);
     setError(null);
     try {
       await apiPost<{ ok: boolean }>("/api/settings/curseforge", { api_key: curseForgeApiKey });
@@ -130,6 +133,21 @@ export const SettingsPage: React.FC = () => {
       setError((e as Error).message ?? "Erreur lors de l'enregistrement de la clé CurseForge");
     } finally {
       setCurseForgeSaving(false);
+    }
+  };
+
+  const testCurseForgeKey = async () => {
+    setCurseForgeTesting(true);
+    setCurseForgeTestResult(null);
+    setError(null);
+    try {
+      const res = await apiPost<{ ok: boolean; error?: string }>("/api/settings/curseforge/test", {});
+      if (res.ok) setCurseForgeTestResult("Clé CurseForge valide.");
+      else setCurseForgeTestResult(`Échec CurseForge : ${res.error ?? "inconnu"}`);
+    } catch (e: unknown) {
+      setCurseForgeTestResult((e as Error).message ?? "Erreur de test CurseForge");
+    } finally {
+      setCurseForgeTesting(false);
     }
   };
 
@@ -238,7 +256,15 @@ export const SettingsPage: React.FC = () => {
               <button type="button" className="btn btn--primary" onClick={onSaveCurseForgeKey} disabled={curseForgeSaving}>
                 {curseForgeSaving ? "Enregistrement…" : "Enregistrer la clé"}
               </button>
+              <button type="button" className="btn btn--secondary" onClick={testCurseForgeKey} disabled={curseForgeTesting}>
+                {curseForgeTesting ? "Test en cours…" : "Tester la clé CurseForge"}
+              </button>
               {curseForgeMessage && <span className="success">{curseForgeMessage}</span>}
+              {curseForgeTestResult && (
+                <span className={curseForgeTestResult.startsWith("Clé") ? "success" : "hint"}>
+                  {curseForgeTestResult}
+                </span>
+              )}
             </div>
           </div>
         </section>

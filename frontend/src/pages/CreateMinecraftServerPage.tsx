@@ -400,117 +400,119 @@ export const CreateMinecraftServerPage: React.FC = () => {
               </>
             ) : (
               <>
-                <label style={{ gridColumn: "1 / -1" }}>
-                  <span>Recherche modpack (server pack)</span>
-                  <input
-                    value={modpackQuery}
-                    onChange={(e) => setModpackQuery(e.target.value)}
-                    placeholder={curseForgeKeySet ? "Ex: All the Mods" : "Clé CurseForge manquante (Paramètres)"}
-                    disabled={!curseForgeKeySet}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        searchModpacks();
-                      }
-                    }}
-                  />
-                </label>
-                <div className="form-actions" style={{ gridColumn: "1 / -1", marginTop: "-0.25rem" }}>
-                  <button type="button" className="btn btn--secondary" onClick={searchModpacks} disabled={!curseForgeKeySet || modpackLoading}>
-                    {modpackLoading ? "Recherche…" : "Rechercher"}
-                  </button>
-                  {!curseForgeKeySet && (
-                    <div style={{ marginTop: "0.5rem", maxWidth: "640px", textAlign: "left" }}>
-                      <p className="error" style={{ marginBottom: "0.25rem" }}>
-                        Clé API CurseForge non configurée. Va dans Paramètres → CurseForge.
-                      </p>
-                      <p className="hint" style={{ marginBottom: "0.25rem" }}>
-                        Comment obtenir une clé CurseForge&nbsp;?
-                      </p>
-                      <ol className="hint" style={{ paddingLeft: "1.2rem", margin: 0 }}>
-                        <li>
-                          Va sur{" "}
-                          <a href="https://console.curseforge.com/" target="_blank" rel="noreferrer">
-                            https://console.curseforge.com/
-                          </a>{" "}
-                          et connecte-toi avec ton compte CurseForge.
-                        </li>
-                        <li>Crée (ou sélectionne) ton organisation si besoin.</li>
-                        <li>
-                          Dans la console, ouvre la section <strong>API Keys</strong> / <strong>API Access</strong> et génère
-                          une clé pour l&apos;API CurseForge.
-                        </li>
-                        <li>
-                          Copie la valeur de la clé et colle-la dans l&apos;onglet{" "}
-                          <strong>Paramètres → CurseForge → Clé API CurseForge</strong>, puis enregistre.
-                        </li>
-                      </ol>
-                    </div>
-                  )}
-                </div>
-
-                {modpackError && (
-                  <div className="card page-panel page-panel--error" style={{ gridColumn: "1 / -1" }}>
-                    <p className="error">{modpackError}</p>
-                  </div>
-                )}
-
-                {modpackResults.length > 0 && (
-                  <div style={{ gridColumn: "1 / -1" }}>
-                    <p className="page-panel-desc" style={{ marginTop: "0.25rem" }}>Résultats :</p>
-                    <ul className="deployments-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", marginTop: "0.5rem" }}>
-                      {modpackResults.map((m) => (
-                        <li key={m.id} className="deployment-card-wrapper">
-                          <button
-                            type="button"
-                            className="card deployment-card"
-                            style={{ textAlign: "left" }}
-                            onClick={() => loadServerPacks(m)}
-                            disabled={serverPacksLoading}
-                          >
-                            <span className="deployment-card-title">{m.name}</span>
-                            <span className="deployment-card-date">{m.summary}</span>
-                            <span className="deployment-card-cta">Choisir →</span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {selectedModpack && (
-                  <label style={{ gridColumn: "1 / -1" }}>
-                    <span>Server pack (pour {selectedModpack.name})</span>
-                    <select
-                      value={form.minecraft.modpack?.file_id ?? ""}
-                      onChange={(e) => {
-                        const fileId = Number(e.target.value);
-                        const f = serverPacks.find((x) => x.file_id === fileId);
-                        const derived = pickMinecraftVersionFromGameVersions(f?.game_versions ?? undefined);
-                        setForm((prev) => ({
-                          ...prev,
-                          minecraft: {
-                            ...prev.minecraft,
-                            modpack: { provider: "curseforge", project_id: selectedModpack.id, file_id: fileId },
-                            version: derived ?? prev.minecraft.version,
-                          },
-                        }));
-                      }}
-                      disabled={serverPacksLoading || !serverPacks.length}
-                    >
-                      <option value="" disabled>
-                        {serverPacksLoading ? "Chargement…" : serverPacks.length ? "Sélectionner une version" : "Aucun server pack"}
-                      </option>
-                      {serverPacks.map((f) => (
-                        <option key={f.file_id} value={f.file_id}>
-                          {f.display_name}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="hint" style={{ marginTop: "0.4rem" }}>
-                      La version Minecraft utilisée pour ce déploiement est déduite du server pack (si possible). Tu peux ensuite ajuster les configs côté serveur.
+                {!curseForgeKeySet ? (
+                  <div style={{ gridColumn: "1 / -1", maxWidth: "640px", textAlign: "left" }}>
+                    <p className="error" style={{ marginBottom: "0.25rem" }}>
+                      Clé API CurseForge non configurée. Va dans Paramètres → CurseForge.
                     </p>
-                  </label>
+                    <p className="hint" style={{ marginBottom: "0.25rem" }}>
+                      Comment obtenir une clé CurseForge&nbsp;?
+                    </p>
+                    <ol className="hint" style={{ paddingLeft: "1.2rem", margin: 0 }}>
+                      <li>
+                        Va sur{" "}
+                        <a href="https://console.curseforge.com/" target="_blank" rel="noreferrer">
+                          https://console.curseforge.com/
+                        </a>{" "}
+                        et connecte-toi avec ton compte CurseForge.
+                      </li>
+                      <li>Crée (ou sélectionne) ton organisation si besoin.</li>
+                      <li>
+                        Dans la console, ouvre la section <strong>API Keys</strong> / <strong>API Access</strong> et génère
+                        une clé pour l&apos;API CurseForge.
+                      </li>
+                      <li>
+                        Copie la valeur de la clé et colle-la dans l&apos;onglet{" "}
+                        <strong>Paramètres → CurseForge → Clé API CurseForge</strong>, puis enregistre.
+                      </li>
+                    </ol>
+                  </div>
+                ) : (
+                  <>
+                    <label style={{ gridColumn: "1 / -1" }}>
+                      <span>Recherche modpack (server pack)</span>
+                      <input
+                        value={modpackQuery}
+                        onChange={(e) => setModpackQuery(e.target.value)}
+                        placeholder="Ex: All the Mods"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            searchModpacks();
+                          }
+                        }}
+                      />
+                    </label>
+                    <div className="form-actions" style={{ gridColumn: "1 / -1", marginTop: "-0.25rem" }}>
+                      <button type="button" className="btn btn--secondary" onClick={searchModpacks} disabled={modpackLoading}>
+                        {modpackLoading ? "Recherche…" : "Rechercher"}
+                      </button>
+                    </div>
+
+                    {modpackError && (
+                      <div className="card page-panel page-panel--error" style={{ gridColumn: "1 / -1" }}>
+                        <p className="error">{modpackError}</p>
+                      </div>
+                    )}
+
+                    {modpackResults.length > 0 && (
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <p className="page-panel-desc" style={{ marginTop: "0.25rem" }}>Résultats :</p>
+                        <ul className="deployments-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", marginTop: "0.5rem" }}>
+                          {modpackResults.map((m) => (
+                            <li key={m.id} className="deployment-card-wrapper">
+                              <button
+                                type="button"
+                                className="card deployment-card"
+                                style={{ textAlign: "left" }}
+                                onClick={() => loadServerPacks(m)}
+                                disabled={serverPacksLoading}
+                              >
+                                <span className="deployment-card-title">{m.name}</span>
+                                <span className="deployment-card-date">{m.summary}</span>
+                                <span className="deployment-card-cta">Choisir →</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {selectedModpack && (
+                      <label style={{ gridColumn: "1 / -1" }}>
+                        <span>Server pack (pour {selectedModpack.name})</span>
+                        <select
+                          value={form.minecraft.modpack?.file_id ?? ""}
+                          onChange={(e) => {
+                            const fileId = Number(e.target.value);
+                            const f = serverPacks.find((x) => x.file_id === fileId);
+                            const derived = pickMinecraftVersionFromGameVersions(f?.game_versions ?? undefined);
+                            setForm((prev) => ({
+                              ...prev,
+                              minecraft: {
+                                ...prev.minecraft,
+                                modpack: { provider: "curseforge", project_id: selectedModpack.id, file_id: fileId },
+                                version: derived ?? prev.minecraft.version,
+                              },
+                            }));
+                          }}
+                          disabled={serverPacksLoading || !serverPacks.length}
+                        >
+                          <option value="" disabled>
+                            {serverPacksLoading ? "Chargement…" : serverPacks.length ? "Sélectionner une version" : "Aucun server pack"}
+                          </option>
+                          {serverPacks.map((f) => (
+                            <option key={f.file_id} value={f.file_id}>
+                              {f.display_name}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="hint" style={{ marginTop: "0.4rem" }}>
+                          La version Minecraft utilisée pour ce déploiement est déduite du server pack (si possible). Tu peux ensuite ajuster les configs côté serveur.
+                        </p>
+                      </label>
+                    )}
+                  </>
                 )}
               </>
             )}
