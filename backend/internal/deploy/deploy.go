@@ -368,6 +368,15 @@ func runAnsibleMinecraft(ctx context.Context, req MinecraftDeploymentRequest, ho
 	extraVars := req.Minecraft.ToAnsibleVars()
 	extraVars["target_host"] = hostIP
 
+	// For vanilla, resolve version to server jar URL so Ansible can download the correct jar.
+	if req.Minecraft.Type == minecraft.TypeVanilla && strings.TrimSpace(req.Minecraft.Version) != "" {
+		jarURL, err := minecraft.ResolveVanillaServerJarURL(strings.TrimSpace(req.Minecraft.Version))
+		if err != nil {
+			return fmt.Errorf("résolution version vanilla: %w", err)
+		}
+		extraVars["mc_server_jar_url"] = jarURL
+	}
+
 	extraJSON, err := json.Marshal(extraVars)
 	if err != nil {
 		return err

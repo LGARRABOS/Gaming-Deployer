@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 )
 
 // ValidateMinecraftRequest performs basic validation on deployment inputs.
@@ -50,6 +51,12 @@ func ValidateMinecraftRequest(req MinecraftDeploymentRequest) error {
 		}
 	}
 
+	// Vanilla: version is required (1.x.x release, e.g. 1.20.4).
+	if req.Minecraft.Type == "vanilla" {
+		if strings.TrimSpace(req.Minecraft.Version) == "" {
+			return errors.New("minecraft.version is required for vanilla (e.g. 1.20.4)")
+		}
+	}
 	// Ports: main port optional (auto from base), but if present must be valid.
 	if req.Minecraft.Port != 0 {
 		if req.Minecraft.Port <= 0 || req.Minecraft.Port > 65535 {

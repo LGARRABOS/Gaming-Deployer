@@ -1,6 +1,0 @@
-Page dédier au monitoring avec des graphique
-Onglet journalisation des action faite du serveur MC
-Couleurs console
-Bouton auto connect WinSCP
-Onglet gestion des joueurs
-Intégration BlueMap

@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiPost } from "../api/client";
+import { apiGet, apiPost } from "../api/client";
 
 interface MinecraftConfig {
   edition: "java";
@@ -32,14 +32,17 @@ interface FormState {
 
 export const CreateMinecraftServerPage: React.FC = () => {
   const navigate = useNavigate();
+  const [vanillaVersions, setVanillaVersions] = useState<string[]>([]);
+  const [vanillaLatest, setVanillaLatest] = useState<string>("");
+  const [versionsLoading, setVersionsLoading] = useState(true);
   const [form, setForm] = useState<FormState>({
     name: "",
     cores: 2,
     memory_mb: 4096,
     minecraft: {
       edition: "java",
-      version: "1.21.1",
-      type: "paper",
+      version: "",
+      type: "vanilla",
       modded: false,
       mods: [],
       port: 25565,
@@ -60,12 +63,44 @@ export const CreateMinecraftServerPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+    setVersionsLoading(true);
+    apiGet<{ versions: string[]; latest: string }>("/api/minecraft/versions")
+      .then((res) => {
+        if (!cancelled && res.versions?.length) {
+          setVanillaVersions(res.versions);
+          setVanillaLatest(res.latest || res.versions[0] || "");
+          setForm((f) => ({
+            ...f,
+            minecraft: {
+              ...f.minecraft,
+              version: f.minecraft.version || res.latest || res.versions[0] || "",
+            },
+          }));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setVanillaVersions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setVersionsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   const update = (field: keyof FormState, value: unknown) => {
     setForm((f) => ({ ...f, [field]: value }));
   };
 
   const updateMinecraft = (field: keyof MinecraftConfig, value: unknown) => {
-    setForm((f) => ({ ...f, minecraft: { ...f.minecraft, [field]: value } }));
+    setForm((f) => {
+      const next = { ...f, minecraft: { ...f.minecraft, [field]: value } };
+      if (field === "type" && value === "vanilla" && vanillaLatest && !next.minecraft.version) {
+        next.minecraft.version = vanillaLatest;
+      }
+      return next;
+    });
   };
 
   const parseList = (value: string): string[] =>
@@ -140,13 +175,6 @@ export const CreateMinecraftServerPage: React.FC = () => {
           <p className="page-panel-desc">Version, type de serveur et paramètres de jeu.</p>
           <div className="form-grid form-grid--wide">
             <label>
-              <span>Version</span>
-              <input
-                value={form.minecraft.version}
-                onChange={(e) => updateMinecraft("version", e.target.value)}
-              />
-            </label>
-            <label>
               <span>Type</span>
               <select
                 value={form.minecraft.type}
@@ -159,6 +187,43 @@ export const CreateMinecraftServerPage: React.FC = () => {
                 <option value="fabric">Fabric</option>
               </select>
             </label>
+            {form.minecraft.type === "vanilla" ? (
+              vanillaVersions.length > 0 ? (
+                <label>
+                  <span>Version (vanilla 1.x.x)</span>
+                  <select
+                    value={form.minecraft.version || vanillaLatest}
+                    onChange={(e) => updateMinecraft("version", e.target.value)}
+                    disabled={versionsLoading}
+                  >
+                    {vanillaVersions.map((v) => (
+                      <option key={v} value={v}>
+                        {v}{v === vanillaLatest ? " (dernière)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <label>
+                  <span>Version (vanilla 1.x.x)</span>
+                  <input
+                    value={form.minecraft.version}
+                    onChange={(e) => updateMinecraft("version", e.target.value)}
+                    placeholder={versionsLoading ? "Chargement…" : "ex: 1.20.4"}
+                    disabled={versionsLoading}
+                  />
+                </label>
+              )
+            ) : (
+              <label>
+                <span>Version</span>
+                <input
+                  value={form.minecraft.version}
+                  onChange={(e) => updateMinecraft("version", e.target.value)}
+                  placeholder="ex: 1.21.1"
+                />
+              </label>
+            )}
             <label className="form-check">
               <input
                 type="checkbox"
