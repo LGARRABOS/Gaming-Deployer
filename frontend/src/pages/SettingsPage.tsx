@@ -22,6 +22,10 @@ export const SettingsPage: React.FC = () => {
   const [testResult, setTestResult] = useState<string | null>(null);
   const [appPublicKey, setAppPublicKey] = useState<string | null>(null);
   const [sshKeyMessage, setSshKeyMessage] = useState<string | null>(null);
+  const [curseForgeApiKey, setCurseForgeApiKey] = useState<string>("");
+  const [curseForgeKeySet, setCurseForgeKeySet] = useState<boolean | null>(null);
+  const [curseForgeSaving, setCurseForgeSaving] = useState(false);
+  const [curseForgeMessage, setCurseForgeMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -29,6 +33,12 @@ export const SettingsPage: React.FC = () => {
       try {
         const cfg = await apiGet<ProxmoxConfigForm>("/api/setup/config");
         if (!cancelled) setForm({ ...cfg, api_token_secret: "" });
+        try {
+          const cf = await apiGet<{ api_key_set: boolean }>("/api/settings/curseforge");
+          if (!cancelled) setCurseForgeKeySet(Boolean(cf?.api_key_set));
+        } catch {
+          if (!cancelled) setCurseForgeKeySet(false);
+        }
         try {
           const keyRes = await apiGet<{ public_key: string }>("/api/setup/ssh-key");
           if (!cancelled) setAppPublicKey(keyRes.public_key);
@@ -106,6 +116,23 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
+  const onSaveCurseForgeKey = async () => {
+    setCurseForgeSaving(true);
+    setCurseForgeMessage(null);
+    setError(null);
+    try {
+      await apiPost<{ ok: boolean }>("/api/settings/curseforge", { api_key: curseForgeApiKey });
+      const cf = await apiGet<{ api_key_set: boolean }>("/api/settings/curseforge");
+      setCurseForgeKeySet(Boolean(cf?.api_key_set));
+      setCurseForgeApiKey("");
+      setCurseForgeMessage(cf?.api_key_set ? "Clé CurseForge enregistrée." : "Clé CurseForge supprimée.");
+    } catch (e: unknown) {
+      setError((e as Error).message ?? "Erreur lors de l'enregistrement de la clé CurseForge");
+    } finally {
+      setCurseForgeSaving(false);
+    }
+  };
+
   if (loading) return <div className="card page-card"><div className="page-loading">Chargement…</div></div>;
   if (!form) return <div className="card page-card"><p className="error">Configuration introuvable.</p></div>;
 
@@ -179,6 +206,40 @@ export const SettingsPage: React.FC = () => {
             <button type="submit" className="btn btn--primary" disabled={saving}>
               {saving ? "Enregistrement…" : "Enregistrer la configuration"}
             </button>
+          </div>
+        </section>
+
+        <section className="card page-panel">
+          <h2 className="page-panel-title">CurseForge</h2>
+          <p className="page-panel-desc">
+            Clé API utilisée pour rechercher et télécharger des <strong>modpacks serveur</strong> via l'API CurseForge.
+            {curseForgeKeySet !== null && (
+              <>
+                {" "}Statut :{" "}
+                <strong className={curseForgeKeySet ? "success" : "hint"}>
+                  {curseForgeKeySet ? "clé configurée" : "clé non configurée"}
+                </strong>.
+              </>
+            )}
+          </p>
+          <div className="settings-inline-form">
+            <div className="form-grid form-grid--wide">
+              <label style={{ gridColumn: "1 / -1" }}>
+                <span>Clé API CurseForge (x-api-key)</span>
+                <input
+                  type="password"
+                  value={curseForgeApiKey}
+                  onChange={(e) => setCurseForgeApiKey(e.target.value)}
+                  placeholder="•••••••• (laisser vide pour supprimer)"
+                />
+              </label>
+            </div>
+            <div className="form-actions">
+              <button type="button" className="btn btn--primary" onClick={onSaveCurseForgeKey} disabled={curseForgeSaving}>
+                {curseForgeSaving ? "Enregistrement…" : "Enregistrer la clé"}
+              </button>
+              {curseForgeMessage && <span className="success">{curseForgeMessage}</span>}
+            </div>
           </div>
         </section>
 

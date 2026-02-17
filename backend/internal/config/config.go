@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -20,6 +21,9 @@ const AppConfigKey = "app_initialized"
 
 // ProxmoxConfigKey is the settings key for proxmox configuration.
 const ProxmoxConfigKey = "proxmox_config"
+
+// CurseForgeAPIKeyKey is the settings key for CurseForge API key (x-api-key header).
+const CurseForgeAPIKeyKey = "curseforge_api_key"
 
 // ProxmoxConfig holds the configuration required to talk to Proxmox and to provision VMs.
 type ProxmoxConfig struct {
@@ -104,5 +108,51 @@ func LoadProxmoxConfig(ctx context.Context, db Store) (*ProxmoxConfig, error) {
 		return nil, err
 	}
 	return &cfg, nil
+}
+
+// SaveCurseForgeAPIKey stores the CurseForge API key. If key is empty/blank, the key is removed.
+// If APP_ENC_KEY is set, the value is encrypted; otherwise it is stored as plain text.
+func SaveCurseForgeAPIKey(ctx context.Context, db Store, key string) error {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		_, err := db.ExecContext(ctx, `DELETE FROM settings WHERE key = ?`, CurseForgeAPIKeyKey)
+		return err
+	}
+	value := key
+	if encKey := os.Getenv("APP_ENC_KEY"); encKey != "" {
+		enc, err := encrypt(value, encKey)
+		if err != nil {
+			return err
+		}
+		value = "enc:" + enc
+	}
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO settings (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value
+	`, CurseForgeAPIKeyKey, value)
+	return err
+}
+
+// LoadCurseForgeAPIKey loads and optionally decrypts the CurseForge API key.
+// Returns empty string if not configured.
+func LoadCurseForgeAPIKey(ctx context.Context, db Store) (string, error) {
+	row := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, CurseForgeAPIKeyKey)
+	var v string
+	if err := row.Scan(&v); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	if len(v) > 4 && v[:4] == "enc:" {
+		key := os.Getenv("APP_ENC_KEY")
+		if key != "" {
+			dec, err := decrypt(v[4:], key)
+			if err == nil {
+				v = dec
+			}
+		}
+	}
+	return v, nil
 }
 

@@ -57,6 +57,18 @@ func ValidateMinecraftRequest(req MinecraftDeploymentRequest) error {
 			return errors.New("minecraft.version is required (e.g. 1.20.4)")
 		}
 	}
+	// Modpack (server pack): requires provider + ids and a Minecraft version (used for server.jar when needed).
+	if req.Minecraft.Modpack != nil {
+		if strings.TrimSpace(req.Minecraft.Modpack.Provider) != "curseforge" {
+			return errors.New("minecraft.modpack.provider must be \"curseforge\"")
+		}
+		if req.Minecraft.Modpack.ProjectID <= 0 || req.Minecraft.Modpack.FileID <= 0 {
+			return errors.New("minecraft.modpack.project_id and file_id are required")
+		}
+		if strings.TrimSpace(req.Minecraft.Version) == "" {
+			return errors.New("minecraft.version is required for modpack deployments (e.g. 1.20.4)")
+		}
+	}
 	// Ports: main port optional (auto from base), but if present must be valid.
 	if req.Minecraft.Port != 0 {
 		if req.Minecraft.Port <= 0 || req.Minecraft.Port > 65535 {

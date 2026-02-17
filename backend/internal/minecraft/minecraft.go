@@ -28,6 +28,13 @@ type ModDescriptor struct {
 	Hash *string `json:"hash,omitempty"`
 }
 
+// ModpackSpec describes a server modpack to install (e.g. CurseForge server pack).
+type ModpackSpec struct {
+	Provider  string `json:"provider"`   // e.g. "curseforge"
+	ProjectID int    `json:"project_id"` // CurseForge project/mod ID
+	FileID    int    `json:"file_id"`    // CurseForge file ID (server pack)
+}
+
 // Config describes the full configuration for a Minecraft server deployment.
 type Config struct {
 	Edition Edition        `json:"edition"`
@@ -35,6 +42,7 @@ type Config struct {
 	Type    ServerType     `json:"type"`
 	Modded  bool           `json:"modded"`
 	Mods    []ModDescriptor `json:"mods,omitempty"`
+	Modpack *ModpackSpec   `json:"modpack,omitempty"`
 
 	Port            int      `json:"port"`
 	ExtraPorts      []int    `json:"extra_ports,omitempty"`
@@ -73,6 +81,14 @@ func (c Config) ToAnsibleVars() map[string]any {
 		}
 		mods = append(mods, entry)
 	}
+	var modpack map[string]any
+	if c.Modpack != nil {
+		modpack = map[string]any{
+			"provider":   c.Modpack.Provider,
+			"project_id": c.Modpack.ProjectID,
+			"file_id":    c.Modpack.FileID,
+		}
+	}
 
 	return map[string]any{
 		"mc_edition":          string(c.Edition),
@@ -80,6 +96,7 @@ func (c Config) ToAnsibleVars() map[string]any {
 		"mc_type":             string(c.Type),
 		"mc_modded":           c.Modded,
 		"mc_mods":             mods,
+		"mc_modpack":          modpack,
 		"mc_port":             c.Port,
 		"mc_extra_ports":      c.ExtraPorts,
 		"mc_eula":             c.EULA,

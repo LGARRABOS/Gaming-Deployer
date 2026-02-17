@@ -2,12 +2,29 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
 
+type CurseForgeModpackResult = {
+  id: number;
+  name: string;
+  slug: string;
+  summary: string;
+  logo_url?: string;
+};
+
+type CurseForgeServerPackFile = {
+  file_id: number;
+  display_name: string;
+  file_name: string;
+  game_versions?: string[];
+  file_date?: string;
+};
+
 interface MinecraftConfig {
   edition: "java";
   version: string;
   type: "vanilla" | "paper" | "purpur" | "forge" | "fabric";
   modded: boolean;
   mods: { url: string; hash?: string }[];
+  modpack: { provider: "curseforge"; project_id: number; file_id: number } | null;
   port: number;
   extra_ports: number[];
   eula: boolean;
@@ -37,6 +54,15 @@ export const CreateMinecraftServerPage: React.FC = () => {
   const [forgeVersions, setForgeVersions] = useState<{ mc_version: string; forge_build: string; full_version: string }[]>([]);
   const [fabricVersions, setFabricVersions] = useState<{ mc_version: string; loader_version: string; full_version: string }[]>([]);
   const [versionsLoading, setVersionsLoading] = useState(true);
+  const [minecraftMode, setMinecraftMode] = useState<"config" | "modpack">("config");
+  const [curseForgeKeySet, setCurseForgeKeySet] = useState<boolean | null>(null);
+  const [modpackQuery, setModpackQuery] = useState("");
+  const [modpackResults, setModpackResults] = useState<CurseForgeModpackResult[]>([]);
+  const [modpackLoading, setModpackLoading] = useState(false);
+  const [selectedModpack, setSelectedModpack] = useState<CurseForgeModpackResult | null>(null);
+  const [serverPacks, setServerPacks] = useState<CurseForgeServerPackFile[]>([]);
+  const [serverPacksLoading, setServerPacksLoading] = useState(false);
+  const [modpackError, setModpackError] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>({
     name: "",
     cores: 2,
@@ -47,6 +73,7 @@ export const CreateMinecraftServerPage: React.FC = () => {
       type: "vanilla",
       modded: false,
       mods: [],
+      modpack: null,
       port: 25565,
       extra_ports: [],
       eula: true,
@@ -64,6 +91,18 @@ export const CreateMinecraftServerPage: React.FC = () => {
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiGet<{ api_key_set: boolean }>("/api/settings/curseforge")
+      .then((res) => {
+        if (!cancelled) setCurseForgeKeySet(Boolean(res?.api_key_set));
+      })
+      .catch(() => {
+        if (!cancelled) setCurseForgeKeySet(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     setForm((f) => {
@@ -116,6 +155,53 @@ export const CreateMinecraftServerPage: React.FC = () => {
       }
       return next;
     });
+  };
+
+  const pickMinecraftVersionFromGameVersions = (versions?: string[]): string | null => {
+    if (!versions?.length) return null;
+    const stable = versions.find((v) => /^1\.\d+\.\d+$/.test(v));
+    return stable ?? null;
+  };
+
+  const searchModpacks = async () => {
+    if (!curseForgeKeySet) {
+      setModpackError("Clé API CurseForge non configurée. Va dans Paramètres → CurseForge.");
+      return;
+    }
+    const q = modpackQuery.trim();
+    if (!q) {
+      setModpackResults([]);
+      return;
+    }
+    setModpackLoading(true);
+    setModpackError(null);
+    try {
+      const res = await apiGet<{ data: CurseForgeModpackResult[] }>(`/api/curseforge/modpacks/search?q=${encodeURIComponent(q)}`);
+      setModpackResults(res?.data ?? []);
+    } catch (e: unknown) {
+      setModpackError((e as Error).message ?? "Erreur CurseForge");
+      setModpackResults([]);
+    } finally {
+      setModpackLoading(false);
+    }
+  };
+
+  const loadServerPacks = async (modpack: CurseForgeModpackResult) => {
+    setSelectedModpack(modpack);
+    setServerPacks([]);
+    setModpackError(null);
+    setServerPacksLoading(true);
+    try {
+      const res = await apiGet<{ data: CurseForgeServerPackFile[] }>(`/api/curseforge/modpacks/${modpack.id}/server-packs`);
+      setServerPacks(res?.data ?? []);
+      if (!res?.data?.length) {
+        setModpackError("Aucun server pack trouvé pour ce modpack sur CurseForge.");
+      }
+    } catch (e: unknown) {
+      setModpackError((e as Error).message ?? "Erreur CurseForge");
+    } finally {
+      setServerPacksLoading(false);
+    }
   };
 
   const parseList = (value: string): string[] =>
@@ -188,108 +274,245 @@ export const CreateMinecraftServerPage: React.FC = () => {
         <section className="card page-panel">
           <h2 className="page-panel-title">Minecraft</h2>
           <p className="page-panel-desc">Version, type de serveur et paramètres de jeu.</p>
+          <div className="deployment-detail-tabs" style={{ marginTop: "0.5rem" }}>
+            <button
+              type="button"
+              className={`deployment-detail-tab ${minecraftMode === "config" ? "deployment-detail-tab--active" : ""}`}
+              onClick={() => {
+                setMinecraftMode("config");
+                setSelectedModpack(null);
+                setServerPacks([]);
+                setModpackResults([]);
+                setModpackError(null);
+                updateMinecraft("modpack", null);
+              }}
+            >
+              Configuration
+            </button>
+            <button
+              type="button"
+              className={`deployment-detail-tab ${minecraftMode === "modpack" ? "deployment-detail-tab--active" : ""}`}
+              onClick={() => {
+                setMinecraftMode("modpack");
+                setModpackError(null);
+              }}
+            >
+              Modpack (CurseForge)
+            </button>
+          </div>
           <div className="form-grid form-grid--wide">
-            <label>
-              <span>Type</span>
-              <select
-                value={form.minecraft.type === "vanilla" || form.minecraft.type === "forge" || form.minecraft.type === "fabric" ? form.minecraft.type : "vanilla"}
-                onChange={(e) => updateMinecraft("type", e.target.value as MinecraftConfig["type"])}
-              >
-                <option value="vanilla">Vanilla</option>
-                <option value="forge">Forge</option>
-                <option value="fabric">Fabric</option>
-              </select>
-            </label>
-            {form.minecraft.type === "vanilla" ? (
-              vanillaVersions.length > 0 ? (
+            {minecraftMode === "config" ? (
+              <>
                 <label>
-                  <span>Version (vanilla 1.x.x)</span>
+                  <span>Type</span>
                   <select
-                    value={form.minecraft.version || vanillaLatest}
-                    onChange={(e) => updateMinecraft("version", e.target.value)}
-                    disabled={versionsLoading}
+                    value={form.minecraft.type === "vanilla" || form.minecraft.type === "forge" || form.minecraft.type === "fabric" ? form.minecraft.type : "vanilla"}
+                    onChange={(e) => updateMinecraft("type", e.target.value as MinecraftConfig["type"])}
                   >
-                    {vanillaVersions.map((v) => (
-                      <option key={v} value={v}>
-                        {v}{v === vanillaLatest ? " (dernière)" : ""}
-                      </option>
-                    ))}
+                    <option value="vanilla">Vanilla</option>
+                    <option value="forge">Forge</option>
+                    <option value="fabric">Fabric</option>
                   </select>
                 </label>
-              ) : (
-                <label>
-                  <span>Version (vanilla 1.x.x)</span>
-                  <input
-                    value={form.minecraft.version}
-                    onChange={(e) => updateMinecraft("version", e.target.value)}
-                    placeholder={versionsLoading ? "Chargement…" : "ex: 1.20.4"}
-                    disabled={versionsLoading}
-                  />
-                </label>
-              )
-            ) : form.minecraft.type === "forge" ? (
-              forgeVersions.length > 0 ? (
-                <label>
-                  <span>Version (Forge stable)</span>
-                  <select
-                    value={form.minecraft.version || forgeVersions[0]?.mc_version}
-                    onChange={(e) => updateMinecraft("version", e.target.value)}
-                    disabled={versionsLoading}
-                  >
-                    {forgeVersions.map((f) => (
-                      <option key={f.full_version} value={f.mc_version}>
-                        {f.mc_version} (Forge {f.forge_build})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : (
-                <label>
-                  <span>Version (Forge)</span>
-                  <input
-                    value={form.minecraft.version}
-                    onChange={(e) => updateMinecraft("version", e.target.value)}
-                    placeholder={versionsLoading ? "Chargement…" : "ex: 1.20.4"}
-                    disabled={versionsLoading}
-                  />
-                </label>
-              )
-            ) : form.minecraft.type === "fabric" ? (
-              fabricVersions.length > 0 ? (
-                <label>
-                  <span>Version (Fabric stable)</span>
-                  <select
-                    value={form.minecraft.version || fabricVersions[0]?.mc_version}
-                    onChange={(e) => updateMinecraft("version", e.target.value)}
-                    disabled={versionsLoading}
-                  >
-                    {fabricVersions.map((f) => (
-                      <option key={f.full_version} value={f.mc_version}>
-                        {f.mc_version}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : (
-                <label>
-                  <span>Version (Fabric)</span>
-                  <input
-                    value={form.minecraft.version}
-                    onChange={(e) => updateMinecraft("version", e.target.value)}
-                    placeholder={versionsLoading ? "Chargement…" : "ex: 1.21.1"}
-                    disabled={versionsLoading}
-                  />
-                </label>
-              )
+                {form.minecraft.type === "vanilla" ? (
+                  vanillaVersions.length > 0 ? (
+                    <label>
+                      <span>Version (vanilla 1.x.x)</span>
+                      <select
+                        value={form.minecraft.version || vanillaLatest}
+                        onChange={(e) => updateMinecraft("version", e.target.value)}
+                        disabled={versionsLoading}
+                      >
+                        {vanillaVersions.map((v) => (
+                          <option key={v} value={v}>
+                            {v}{v === vanillaLatest ? " (dernière)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <label>
+                      <span>Version (vanilla 1.x.x)</span>
+                      <input
+                        value={form.minecraft.version}
+                        onChange={(e) => updateMinecraft("version", e.target.value)}
+                        placeholder={versionsLoading ? "Chargement…" : "ex: 1.20.4"}
+                        disabled={versionsLoading}
+                      />
+                    </label>
+                  )
+                ) : form.minecraft.type === "forge" ? (
+                  forgeVersions.length > 0 ? (
+                    <label>
+                      <span>Version (Forge stable)</span>
+                      <select
+                        value={form.minecraft.version || forgeVersions[0]?.mc_version}
+                        onChange={(e) => updateMinecraft("version", e.target.value)}
+                        disabled={versionsLoading}
+                      >
+                        {forgeVersions.map((f) => (
+                          <option key={f.full_version} value={f.mc_version}>
+                            {f.mc_version} (Forge {f.forge_build})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <label>
+                      <span>Version (Forge)</span>
+                      <input
+                        value={form.minecraft.version}
+                        onChange={(e) => updateMinecraft("version", e.target.value)}
+                        placeholder={versionsLoading ? "Chargement…" : "ex: 1.20.4"}
+                        disabled={versionsLoading}
+                      />
+                    </label>
+                  )
+                ) : (
+                  // fabric
+                  fabricVersions.length > 0 ? (
+                    <label>
+                      <span>Version (Fabric stable)</span>
+                      <select
+                        value={form.minecraft.version || fabricVersions[0]?.mc_version}
+                        onChange={(e) => updateMinecraft("version", e.target.value)}
+                        disabled={versionsLoading}
+                      >
+                        {fabricVersions.map((f) => (
+                          <option key={f.full_version} value={f.mc_version}>
+                            {f.mc_version}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <label>
+                      <span>Version (Fabric)</span>
+                      <input
+                        value={form.minecraft.version}
+                        onChange={(e) => updateMinecraft("version", e.target.value)}
+                        placeholder={versionsLoading ? "Chargement…" : "ex: 1.21.1"}
+                        disabled={versionsLoading}
+                      />
+                    </label>
+                  )
+                )}
+              </>
             ) : (
-              <label>
-                <span>Version</span>
-                <input
-                  value={form.minecraft.version}
-                  onChange={(e) => updateMinecraft("version", e.target.value)}
-                  placeholder="ex: 1.21.1"
-                />
-              </label>
+              <>
+                <label style={{ gridColumn: "1 / -1" }}>
+                  <span>Recherche modpack (server pack)</span>
+                  <input
+                    value={modpackQuery}
+                    onChange={(e) => setModpackQuery(e.target.value)}
+                    placeholder={curseForgeKeySet ? "Ex: All the Mods" : "Clé CurseForge manquante (Paramètres)"}
+                    disabled={!curseForgeKeySet}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        searchModpacks();
+                      }
+                    }}
+                  />
+                </label>
+                <div className="form-actions" style={{ gridColumn: "1 / -1", marginTop: "-0.25rem" }}>
+                  <button type="button" className="btn btn--secondary" onClick={searchModpacks} disabled={!curseForgeKeySet || modpackLoading}>
+                    {modpackLoading ? "Recherche…" : "Rechercher"}
+                  </button>
+                  {!curseForgeKeySet && (
+                    <div style={{ marginTop: "0.5rem", maxWidth: "640px", textAlign: "left" }}>
+                      <p className="error" style={{ marginBottom: "0.25rem" }}>
+                        Clé API CurseForge non configurée. Va dans Paramètres → CurseForge.
+                      </p>
+                      <p className="hint" style={{ marginBottom: "0.25rem" }}>
+                        Comment obtenir une clé CurseForge&nbsp;?
+                      </p>
+                      <ol className="hint" style={{ paddingLeft: "1.2rem", margin: 0 }}>
+                        <li>
+                          Va sur{" "}
+                          <a href="https://console.curseforge.com/" target="_blank" rel="noreferrer">
+                            https://console.curseforge.com/
+                          </a>{" "}
+                          et connecte-toi avec ton compte CurseForge.
+                        </li>
+                        <li>Crée (ou sélectionne) ton organisation si besoin.</li>
+                        <li>
+                          Dans la console, ouvre la section <strong>API Keys</strong> / <strong>API Access</strong> et génère
+                          une clé pour l&apos;API CurseForge.
+                        </li>
+                        <li>
+                          Copie la valeur de la clé et colle-la dans l&apos;onglet{" "}
+                          <strong>Paramètres → CurseForge → Clé API CurseForge</strong>, puis enregistre.
+                        </li>
+                      </ol>
+                    </div>
+                  )}
+                </div>
+
+                {modpackError && (
+                  <div className="card page-panel page-panel--error" style={{ gridColumn: "1 / -1" }}>
+                    <p className="error">{modpackError}</p>
+                  </div>
+                )}
+
+                {modpackResults.length > 0 && (
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <p className="page-panel-desc" style={{ marginTop: "0.25rem" }}>Résultats :</p>
+                    <ul className="deployments-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", marginTop: "0.5rem" }}>
+                      {modpackResults.map((m) => (
+                        <li key={m.id} className="deployment-card-wrapper">
+                          <button
+                            type="button"
+                            className="card deployment-card"
+                            style={{ textAlign: "left" }}
+                            onClick={() => loadServerPacks(m)}
+                            disabled={serverPacksLoading}
+                          >
+                            <span className="deployment-card-title">{m.name}</span>
+                            <span className="deployment-card-date">{m.summary}</span>
+                            <span className="deployment-card-cta">Choisir →</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {selectedModpack && (
+                  <label style={{ gridColumn: "1 / -1" }}>
+                    <span>Server pack (pour {selectedModpack.name})</span>
+                    <select
+                      value={form.minecraft.modpack?.file_id ?? ""}
+                      onChange={(e) => {
+                        const fileId = Number(e.target.value);
+                        const f = serverPacks.find((x) => x.file_id === fileId);
+                        const derived = pickMinecraftVersionFromGameVersions(f?.game_versions ?? undefined);
+                        setForm((prev) => ({
+                          ...prev,
+                          minecraft: {
+                            ...prev.minecraft,
+                            modpack: { provider: "curseforge", project_id: selectedModpack.id, file_id: fileId },
+                            version: derived ?? prev.minecraft.version,
+                          },
+                        }));
+                      }}
+                      disabled={serverPacksLoading || !serverPacks.length}
+                    >
+                      <option value="" disabled>
+                        {serverPacksLoading ? "Chargement…" : serverPacks.length ? "Sélectionner une version" : "Aucun server pack"}
+                      </option>
+                      {serverPacks.map((f) => (
+                        <option key={f.file_id} value={f.file_id}>
+                          {f.display_name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="hint" style={{ marginTop: "0.4rem" }}>
+                      La version Minecraft utilisée pour ce déploiement est déduite du server pack (si possible). Tu peux ensuite ajuster les configs côté serveur.
+                    </p>
+                  </label>
+                )}
+              </>
             )}
             <label className="form-check">
               <input

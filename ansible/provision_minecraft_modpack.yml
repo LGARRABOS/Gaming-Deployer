@@ -1,0 +1,21 @@
+---
+- name: Provision Minecraft server (Modpack)
+  hosts: all
+  become: true
+  vars:
+    # When mc_admin_user is set: install in their home and run as them; else classic /opt/minecraft + user minecraft
+    mc_user: "{{ mc_admin_user | default('minecraft') }}"
+    mc_dir: "{{ ('/home/' + mc_admin_user + '/minecraft') if mc_admin_user is defined else '/opt/minecraft' }}"
+    mc_service_name: minecraft
+
+  tasks:
+    - import_tasks: tasks/minecraft_base.yml
+    - import_tasks: tasks/minecraft_modpack.yml
+    - import_tasks: tasks/minecraft_systemd_modpack.yml
+
+  handlers:
+    - name: Restart sshd
+      service:
+        name: "{{ 'ssh' if ansible_os_family == 'Debian' else 'sshd' }}"
+        state: restarted
+

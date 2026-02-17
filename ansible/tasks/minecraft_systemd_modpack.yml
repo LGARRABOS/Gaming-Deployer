@@ -1,0 +1,58 @@
+- name: Detect modpack launcher (run.sh / fabric-server-launch.jar / server.jar)
+  stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ mc_dir }}/run.sh"
+    - "{{ mc_dir }}/fabric-server-launch.jar"
+    - "{{ mc_dir }}/server.jar"
+  register: mc_launchers
+
+- name: Compute ExecStart for modpack service
+  set_fact:
+    mc_modpack_execstart: >-
+      {% set run = (mc_launchers.results[0].stat.exists | default(false)) %}
+      {% set fabric = (mc_launchers.results[1].stat.exists | default(false)) %}
+      {% set vanilla = (mc_launchers.results[2].stat.exists | default(false)) %}
+      {% if run %}
+      /bin/bash run.sh nogui
+      {% elif fabric %}
+      /usr/bin/java -Xmx{{ mc_jvm_heap }} {{ mc_jvm_flags | default('') }} -jar fabric-server-launch.jar nogui
+      {% elif vanilla %}
+      /usr/bin/java -Xmx{{ mc_jvm_heap }} {{ mc_jvm_flags }} -jar server.jar nogui
+      {% else %}
+      __MISSING__
+      {% endif %}
+
+- name: Fail if no launcher was found in modpack
+  fail:
+    msg: "Aucun lanceur trouvé dans {{ mc_dir }} (attendu: run.sh, fabric-server-launch.jar ou server.jar)"
+  when: mc_modpack_execstart == "__MISSING__"
+
+- name: Create systemd service (Modpack)
+  copy:
+    dest: /etc/systemd/system/{{ mc_service_name }}.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Minecraft Modpack Server
+      After=network.target
+
+      [Service]
+      WorkingDirectory={{ mc_dir }}
+      User={{ mc_user }}
+      Group={{ mc_user }}
+      Restart=always
+      ExecStart={{ mc_modpack_execstart }}
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Reload systemd
+  systemd:
+    daemon_reload: true
+
+- name: Enable and start minecraft service
+  systemd:
+    name: "{{ mc_service_name }}"
+    enabled: true
+    state: started

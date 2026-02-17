@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/example/proxmox-game-deployer/internal/config"
+	"github.com/example/proxmox-game-deployer/internal/curseforge"
 	"github.com/example/proxmox-game-deployer/internal/minecraft"
 	"github.com/example/proxmox-game-deployer/internal/proxmox"
 )
@@ -328,7 +329,8 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 	if dryRun {
 		appendLog(ctx, db, *deploymentID, "info", "DRY_RUN enabled: skipping actual ansible-playbook invocation")
 	} else {
-		if err := runAnsibleMinecraft(ctx, req, ip, cfg.SSHUser); err != nil {
+		cfKey, _ := config.LoadCurseForgeAPIKey(ctx, db)
+		if err := runAnsibleMinecraft(ctx, req, ip, cfg.SSHUser, cfKey); err != nil {
 			appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Ansible provisioning failed: %v", err))
 			return err
 		}
@@ -360,48 +362,85 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 }
 
 // runAnsibleMinecraft spawns ansible-playbook with the relevant variables.
-func runAnsibleMinecraft(ctx context.Context, req MinecraftDeploymentRequest, hostIP, sshUser string) error {
+func runAnsibleMinecraft(ctx context.Context, req MinecraftDeploymentRequest, hostIP, sshUser, curseForgeAPIKey string) error {
 	playbook := "./ansible/provision_minecraft.yml"
-	if v := os.Getenv("ANSIBLE_PLAYBOOK_PATH"); v != "" {
+	if req.Minecraft.Modpack != nil {
+		playbook = "./ansible/provision_minecraft_modpack.yml"
+		if v := os.Getenv("ANSIBLE_MODPACK_PLAYBOOK_PATH"); v != "" {
+			playbook = v
+		}
+	} else if v := os.Getenv("ANSIBLE_PLAYBOOK_PATH"); v != "" {
 		playbook = v
 	}
 
 	extraVars := req.Minecraft.ToAnsibleVars()
 	extraVars["target_host"] = hostIP
 
-	// For vanilla, resolve version to server jar URL so Ansible can download the correct jar.
-	if req.Minecraft.Type == minecraft.TypeVanilla && strings.TrimSpace(req.Minecraft.Version) != "" {
-		jarURL, err := minecraft.ResolveVanillaServerJarURL(strings.TrimSpace(req.Minecraft.Version))
-		if err != nil {
-			return fmt.Errorf("résolution version vanilla: %w", err)
+	if req.Minecraft.Modpack != nil {
+		mp := req.Minecraft.Modpack
+		if strings.TrimSpace(curseForgeAPIKey) == "" {
+			return fmt.Errorf("clé API CurseForge non configurée (Paramètres → CurseForge)")
 		}
-		extraVars["mc_server_jar_url"] = jarURL
-	}
-	// For Forge, resolve to recommended installer URL; Ansible will run the installer (--installServer).
-	if req.Minecraft.Type == minecraft.TypeForge && strings.TrimSpace(req.Minecraft.Version) != "" {
-		installerURL, fullVersion, err := minecraft.ResolveForgeInstallerURL(strings.TrimSpace(req.Minecraft.Version))
-		if err != nil {
-			return fmt.Errorf("résolution version Forge: %w", err)
+		if mp.Provider != "curseforge" {
+			return fmt.Errorf("provider modpack non supporté: %s", mp.Provider)
 		}
-		extraVars["mc_forge_installer_url"] = installerURL
-		extraVars["mc_forge_full_version"] = fullVersion
-	}
-	// For Fabric, resolve installer URL and loader version; Ansible will run the installer (server mode).
-	// Fabric's launcher also needs the vanilla server JAR at server.jar — we pass its URL for Ansible to download.
-	if req.Minecraft.Type == minecraft.TypeFabric && strings.TrimSpace(req.Minecraft.Version) != "" {
+		directURL, fallbackURL, err := curseforge.New(curseForgeAPIKey).GetDownloadURL(ctx, mp.ProjectID, mp.FileID)
+		if err != nil {
+			return fmt.Errorf("résolution URL modpack CurseForge: %w", err)
+		}
+		downloadURL := directURL
+		if strings.TrimSpace(downloadURL) == "" {
+			downloadURL = fallbackURL
+		}
+		extraVars["mc_modpack_url"] = downloadURL
+		extraVars["mc_modpack_provider"] = mp.Provider
+		extraVars["mc_modpack_project_id"] = mp.ProjectID
+		extraVars["mc_modpack_file_id"] = mp.FileID
+
+		// Many server packs cannot bundle Mojang's server.jar. Provide it so Fabric/Forge launchers can work.
 		mcVer := strings.TrimSpace(req.Minecraft.Version)
-		installerURL, loaderVersion, err := minecraft.ResolveFabricInstallerParams(mcVer)
-		if err != nil {
-			return fmt.Errorf("résolution version Fabric: %w", err)
+		if mcVer != "" {
+			jarURL, err := minecraft.ResolveVanillaServerJarURL(mcVer)
+			if err != nil {
+				return fmt.Errorf("résolution JAR vanilla pour modpack: %w", err)
+			}
+			extraVars["mc_server_jar_url"] = jarURL
 		}
-		jarURL, err := minecraft.ResolveVanillaServerJarURL(mcVer)
-		if err != nil {
-			return fmt.Errorf("résolution JAR vanilla pour Fabric: %w", err)
+	} else {
+		// For vanilla, resolve version to server jar URL so Ansible can download the correct jar.
+		if req.Minecraft.Type == minecraft.TypeVanilla && strings.TrimSpace(req.Minecraft.Version) != "" {
+			jarURL, err := minecraft.ResolveVanillaServerJarURL(strings.TrimSpace(req.Minecraft.Version))
+			if err != nil {
+				return fmt.Errorf("résolution version vanilla: %w", err)
+			}
+			extraVars["mc_server_jar_url"] = jarURL
 		}
-		extraVars["mc_fabric_installer_url"] = installerURL
-		extraVars["mc_fabric_mc_version"] = mcVer
-		extraVars["mc_fabric_loader_version"] = loaderVersion
-		extraVars["mc_server_jar_url"] = jarURL
+		// For Forge, resolve to recommended installer URL; Ansible will run the installer (--installServer).
+		if req.Minecraft.Type == minecraft.TypeForge && strings.TrimSpace(req.Minecraft.Version) != "" {
+			installerURL, fullVersion, err := minecraft.ResolveForgeInstallerURL(strings.TrimSpace(req.Minecraft.Version))
+			if err != nil {
+				return fmt.Errorf("résolution version Forge: %w", err)
+			}
+			extraVars["mc_forge_installer_url"] = installerURL
+			extraVars["mc_forge_full_version"] = fullVersion
+		}
+		// For Fabric, resolve installer URL and loader version; Ansible will run the installer (server mode).
+		// Fabric's launcher also needs the vanilla server JAR at server.jar — we pass its URL for Ansible to download.
+		if req.Minecraft.Type == minecraft.TypeFabric && strings.TrimSpace(req.Minecraft.Version) != "" {
+			mcVer := strings.TrimSpace(req.Minecraft.Version)
+			installerURL, loaderVersion, err := minecraft.ResolveFabricInstallerParams(mcVer)
+			if err != nil {
+				return fmt.Errorf("résolution version Fabric: %w", err)
+			}
+			jarURL, err := minecraft.ResolveVanillaServerJarURL(mcVer)
+			if err != nil {
+				return fmt.Errorf("résolution JAR vanilla pour Fabric: %w", err)
+			}
+			extraVars["mc_fabric_installer_url"] = installerURL
+			extraVars["mc_fabric_mc_version"] = mcVer
+			extraVars["mc_fabric_loader_version"] = loaderVersion
+			extraVars["mc_server_jar_url"] = jarURL
+		}
 	}
 
 	extraJSON, err := json.Marshal(extraVars)
