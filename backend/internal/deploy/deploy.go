@@ -376,6 +376,15 @@ func runAnsibleMinecraft(ctx context.Context, req MinecraftDeploymentRequest, ho
 		}
 		extraVars["mc_server_jar_url"] = jarURL
 	}
+	// For Forge, resolve to recommended installer URL; Ansible will run the installer (--installServer).
+	if req.Minecraft.Type == minecraft.TypeForge && strings.TrimSpace(req.Minecraft.Version) != "" {
+		installerURL, fullVersion, err := minecraft.ResolveForgeInstallerURL(strings.TrimSpace(req.Minecraft.Version))
+		if err != nil {
+			return fmt.Errorf("résolution version Forge: %w", err)
+		}
+		extraVars["mc_forge_installer_url"] = installerURL
+		extraVars["mc_forge_full_version"] = fullVersion
+	}
 
 	extraJSON, err := json.Marshal(extraVars)
 	if err != nil {

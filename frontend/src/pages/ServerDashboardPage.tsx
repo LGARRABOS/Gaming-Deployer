@@ -939,9 +939,6 @@ export const ServerDashboardPage: React.FC = () => {
         {activeTab === "migration" && (
           <section className="card server-panel server-panel--wide">
             <h2 className="server-panel-title">Migration de version</h2>
-            <p className="server-panel-desc">
-              Passez le serveur à une autre version vanilla (1.x.x) sans perdre le monde ni la configuration. Le serveur sera arrêté brièvement pendant le remplacement du fichier server.jar.
-            </p>
             {migrateVersionsLoading ? (
               <p className="server-panel-desc">Chargement des versions…</p>
             ) : migrateVersions.length === 0 ? (

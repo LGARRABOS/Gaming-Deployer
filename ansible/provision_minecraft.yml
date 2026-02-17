@@ -115,19 +115,35 @@
             AllowTcpForwarding no
       notify: Restart sshd
 
-    # Vanilla: mc_server_jar_url is set by the backend from the chosen version (1.x.x release).
-    # Fallback URL is latest vanilla 1.21.11 if mc_server_jar_url is not set (e.g. non-vanilla type).
+    # Vanilla: download server.jar when not using Forge.
     - name: Download Minecraft server jar (vanilla)
       get_url:
         url: "{{ mc_server_jar_url | default('https://piston-data.mojang.com/v1/objects/64bb6d763bed0a9f1d632ec347938594144943ed/server.jar') }}"
         dest: "{{ mc_dir }}/server.jar"
         mode: "0644"
+      when: mc_forge_installer_url is not defined
 
     - name: Set ownership of server jar
       file:
         path: "{{ mc_dir }}/server.jar"
         owner: "{{ mc_user }}"
         group: "{{ mc_user }}"
+      when: mc_forge_installer_url is not defined
+
+    # Forge: download installer and run --installServer (creates run.sh, libraries, etc.).
+    - name: Download Forge installer
+      get_url:
+        url: "{{ mc_forge_installer_url }}"
+        dest: "{{ mc_dir }}/forge-installer.jar"
+        mode: "0644"
+      when: mc_forge_installer_url is defined
+
+    - name: Set ownership of Forge installer
+      file:
+        path: "{{ mc_dir }}/forge-installer.jar"
+        owner: "{{ mc_user }}"
+        group: "{{ mc_user }}"
+      when: mc_forge_installer_url is defined
 
     - name: Accept EULA
       copy:
@@ -136,6 +152,29 @@
         owner: "{{ mc_user }}"
         group: "{{ mc_user }}"
         mode: "0644"
+
+    - name: Run Forge installer (install server)
+      command: java -jar forge-installer.jar --installServer
+      args:
+        chdir: "{{ mc_dir }}"
+        creates: "{{ mc_dir }}/run.sh"
+      become_user: "{{ mc_user }}"
+      when: mc_forge_installer_url is defined
+
+    - name: Make run.sh executable (Forge)
+      file:
+        path: "{{ mc_dir }}/run.sh"
+        mode: "0755"
+      when: mc_forge_installer_url is defined
+
+    - name: Create user_jvm_args.txt for Forge (heap and extra flags)
+      copy:
+        dest: "{{ mc_dir }}/user_jvm_args.txt"
+        content: "-Xmx{{ mc_jvm_heap }} {{ mc_jvm_flags | default('') }}"
+        owner: "{{ mc_user }}"
+        group: "{{ mc_user }}"
+        mode: "0644"
+      when: mc_forge_installer_url is defined
 
     - name: Render server.properties
       copy:
@@ -169,7 +208,7 @@
         proto: tcp
       when: ansible_facts.services is not defined or 'ufw' in ansible_facts.services
 
-    - name: Create systemd service
+    - name: Create systemd service (vanilla)
       copy:
         dest: /etc/systemd/system/{{ mc_service_name }}.service
         mode: "0644"
@@ -187,6 +226,27 @@
 
           [Install]
           WantedBy=multi-user.target
+      when: mc_forge_installer_url is not defined
+
+    - name: Create systemd service (Forge)
+      copy:
+        dest: /etc/systemd/system/{{ mc_service_name }}.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Minecraft Forge Server
+          After=network.target
+
+          [Service]
+          WorkingDirectory={{ mc_dir }}
+          User={{ mc_user }}
+          Group={{ mc_user }}
+          Restart=always
+          ExecStart=/bin/bash run.sh nogui
+
+          [Install]
+          WantedBy=multi-user.target
+      when: mc_forge_installer_url is defined
 
     - name: Reload systemd
       systemd:

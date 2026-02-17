@@ -34,6 +34,7 @@ export const CreateMinecraftServerPage: React.FC = () => {
   const navigate = useNavigate();
   const [vanillaVersions, setVanillaVersions] = useState<string[]>([]);
   const [vanillaLatest, setVanillaLatest] = useState<string>("");
+  const [forgeVersions, setForgeVersions] = useState<{ mc_version: string; forge_build: string; full_version: string }[]>([]);
   const [versionsLoading, setVersionsLoading] = useState(true);
   const [form, setForm] = useState<FormState>({
     name: "",
@@ -66,11 +67,12 @@ export const CreateMinecraftServerPage: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     setVersionsLoading(true);
-    apiGet<{ versions: string[]; latest: string }>("/api/minecraft/versions")
+    apiGet<{ versions: string[]; latest: string; forge_versions?: { mc_version: string; forge_build: string; full_version: string }[] }>("/api/minecraft/versions")
       .then((res) => {
         if (!cancelled && res.versions?.length) {
           setVanillaVersions(res.versions);
           setVanillaLatest(res.latest || res.versions[0] || "");
+          if (res.forge_versions?.length) setForgeVersions(res.forge_versions);
           setForm((f) => ({
             ...f,
             minecraft: {
@@ -96,8 +98,9 @@ export const CreateMinecraftServerPage: React.FC = () => {
   const updateMinecraft = (field: keyof MinecraftConfig, value: unknown) => {
     setForm((f) => {
       const next = { ...f, minecraft: { ...f.minecraft, [field]: value } };
-      if (field === "type" && value === "vanilla" && vanillaLatest && !next.minecraft.version) {
-        next.minecraft.version = vanillaLatest;
+      if (field === "type") {
+        if (value === "vanilla" && vanillaLatest && !next.minecraft.version) next.minecraft.version = vanillaLatest;
+        if (value === "forge" && forgeVersions.length && !next.minecraft.version) next.minecraft.version = forgeVersions[0].mc_version;
       }
       return next;
     });
@@ -206,6 +209,33 @@ export const CreateMinecraftServerPage: React.FC = () => {
               ) : (
                 <label>
                   <span>Version (vanilla 1.x.x)</span>
+                  <input
+                    value={form.minecraft.version}
+                    onChange={(e) => updateMinecraft("version", e.target.value)}
+                    placeholder={versionsLoading ? "Chargement…" : "ex: 1.20.4"}
+                    disabled={versionsLoading}
+                  />
+                </label>
+              )
+            ) : form.minecraft.type === "forge" ? (
+              forgeVersions.length > 0 ? (
+                <label>
+                  <span>Version (Forge stable)</span>
+                  <select
+                    value={form.minecraft.version || forgeVersions[0]?.mc_version}
+                    onChange={(e) => updateMinecraft("version", e.target.value)}
+                    disabled={versionsLoading}
+                  >
+                    {forgeVersions.map((f) => (
+                      <option key={f.full_version} value={f.mc_version}>
+                        {f.mc_version} (Forge {f.forge_build})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <label>
+                  <span>Version (Forge)</span>
                   <input
                     value={form.minecraft.version}
                     onChange={(e) => updateMinecraft("version", e.target.value)}
