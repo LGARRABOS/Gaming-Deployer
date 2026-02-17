@@ -17,7 +17,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/example/proxmox-game-deployer/internal/config"
-	"github.com/example/proxmox-game-deployer/internal/curseforge"
 	"github.com/example/proxmox-game-deployer/internal/minecraft"
 	"github.com/example/proxmox-game-deployer/internal/proxmox"
 )
@@ -329,8 +328,7 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 	if dryRun {
 		appendLog(ctx, db, *deploymentID, "info", "DRY_RUN enabled: skipping actual ansible-playbook invocation")
 	} else {
-		cfKey, _ := config.LoadCurseForgeAPIKey(ctx, db)
-		if err := runAnsibleMinecraft(ctx, req, ip, cfg.SSHUser, cfKey); err != nil {
+		if err := runAnsibleMinecraft(ctx, req, ip, cfg.SSHUser); err != nil {
 			appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Ansible provisioning failed: %v", err))
 			return err
 		}
@@ -362,9 +360,10 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 }
 
 // runAnsibleMinecraft spawns ansible-playbook with the relevant variables.
-func runAnsibleMinecraft(ctx context.Context, req MinecraftDeploymentRequest, hostIP, sshUser, curseForgeAPIKey string) error {
+func runAnsibleMinecraft(ctx context.Context, req MinecraftDeploymentRequest, hostIP, sshUser string) error {
 	playbook := "./ansible/provision_minecraft.yml"
-	if req.Minecraft.Modpack != nil {
+	hasModpackURL := strings.TrimSpace(req.Minecraft.ModpackURL) != ""
+	if req.Minecraft.Modpack != nil || hasModpackURL {
 		playbook = "./ansible/provision_minecraft_modpack.yml"
 		if v := os.Getenv("ANSIBLE_MODPACK_PLAYBOOK_PATH"); v != "" {
 			playbook = v
@@ -376,35 +375,20 @@ func runAnsibleMinecraft(ctx context.Context, req MinecraftDeploymentRequest, ho
 	extraVars := req.Minecraft.ToAnsibleVars()
 	extraVars["target_host"] = hostIP
 
-	if req.Minecraft.Modpack != nil {
-		mp := req.Minecraft.Modpack
-		if strings.TrimSpace(curseForgeAPIKey) == "" {
-			return fmt.Errorf("clé API CurseForge non configurée (Paramètres → CurseForge)")
+	if hasModpackURL {
+		// Direct server pack URL (no CurseForge API usage).
+		url := strings.TrimSpace(req.Minecraft.ModpackURL)
+		if url == "" {
+			return fmt.Errorf("minecraft.modpack_url is empty")
 		}
-		if mp.Provider != "curseforge" {
-			return fmt.Errorf("provider modpack non supporté: %s", mp.Provider)
-		}
-		directURL, fallbackURL, err := curseforge.New(curseForgeAPIKey).GetDownloadURL(ctx, mp.ProjectID, mp.FileID)
-		if err != nil {
-			return fmt.Errorf("résolution URL modpack CurseForge: %w", err)
-		}
-		downloadURL := directURL
-		if strings.TrimSpace(downloadURL) == "" {
-			downloadURL = fallbackURL
-		}
-		extraVars["mc_modpack_url"] = downloadURL
-		extraVars["mc_modpack_provider"] = mp.Provider
-		extraVars["mc_modpack_project_id"] = mp.ProjectID
-		extraVars["mc_modpack_file_id"] = mp.FileID
-
-		// Many server packs cannot bundle Mojang's server.jar. Provide it so Fabric/Forge launchers can work.
+		extraVars["mc_modpack_url"] = url
+		// Optionnel : jar vanilla si la version est fournie.
 		mcVer := strings.TrimSpace(req.Minecraft.Version)
 		if mcVer != "" {
 			jarURL, err := minecraft.ResolveVanillaServerJarURL(mcVer)
-			if err != nil {
-				return fmt.Errorf("résolution JAR vanilla pour modpack: %w", err)
+			if err == nil {
+				extraVars["mc_server_jar_url"] = jarURL
 			}
-			extraVars["mc_server_jar_url"] = jarURL
 		}
 	} else {
 		// For vanilla, resolve version to server jar URL so Ansible can download the correct jar.

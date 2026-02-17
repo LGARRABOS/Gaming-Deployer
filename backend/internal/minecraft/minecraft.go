@@ -43,6 +43,10 @@ type Config struct {
 	Modded  bool           `json:"modded"`
 	Mods    []ModDescriptor `json:"mods,omitempty"`
 	Modpack *ModpackSpec   `json:"modpack,omitempty"`
+	// ModpackURL allows specifying a direct URL to a server pack archive (ZIP),
+	// without going through the CurseForge API. If both Modpack and ModpackURL are
+	// set, Modpack takes precedence.
+	ModpackURL string       `json:"modpack_url,omitempty"`
 
 	Port            int      `json:"port"`
 	ExtraPorts      []int    `json:"extra_ports,omitempty"`
