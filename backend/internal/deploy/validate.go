@@ -70,8 +70,13 @@ func ValidateMinecraftRequest(req MinecraftDeploymentRequest) error {
 		}
 	}
 	// Direct modpack URL: basic validation (no provider/file IDs required).
-	if strings.TrimSpace(req.Minecraft.ModpackURL) != "" && req.Minecraft.Modpack != nil {
-		return errors.New("minecraft.modpack and minecraft.modpack_url cannot both be set")
+	if url := strings.TrimSpace(req.Minecraft.ModpackURL); url != "" {
+		if req.Minecraft.Modpack != nil {
+			return errors.New("minecraft.modpack and minecraft.modpack_url cannot both be set")
+		}
+		if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+			return errors.New("minecraft.modpack_url must start with http:// or https://")
+		}
 	}
 	// Ports: main port optional (auto from base), but if present must be valid.
 	if req.Minecraft.Port != 0 {
