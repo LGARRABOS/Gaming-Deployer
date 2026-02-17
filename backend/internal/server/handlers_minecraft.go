@@ -33,5 +33,17 @@ func (s *Server) handleMinecraftVersions(w http.ResponseWriter, r *http.Request)
 		}
 		out["forge_versions"] = forgePayload
 	}
+	fabricList, errFabric := minecraft.GetFabricReleaseVersions()
+	if errFabric == nil && len(fabricList) > 0 {
+		fabricPayload := make([]map[string]string, 0, len(fabricList))
+		for _, f := range fabricList {
+			fabricPayload = append(fabricPayload, map[string]string{
+				"mc_version":     f.MCVersion,
+				"loader_version": f.LoaderVersion,
+				"full_version":   f.FullVersion,
+			})
+		}
+		out["fabric_versions"] = fabricPayload
+	}
 	writeJSON(w, http.StatusOK, out)
 }

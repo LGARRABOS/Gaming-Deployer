@@ -35,6 +35,7 @@ export const CreateMinecraftServerPage: React.FC = () => {
   const [vanillaVersions, setVanillaVersions] = useState<string[]>([]);
   const [vanillaLatest, setVanillaLatest] = useState<string>("");
   const [forgeVersions, setForgeVersions] = useState<{ mc_version: string; forge_build: string; full_version: string }[]>([]);
+  const [fabricVersions, setFabricVersions] = useState<{ mc_version: string; loader_version: string; full_version: string }[]>([]);
   const [versionsLoading, setVersionsLoading] = useState(true);
   const [form, setForm] = useState<FormState>({
     name: "",
@@ -66,7 +67,7 @@ export const CreateMinecraftServerPage: React.FC = () => {
 
   useEffect(() => {
     setForm((f) => {
-      if (f.minecraft.type !== "vanilla" && f.minecraft.type !== "forge") {
+      if (f.minecraft.type !== "vanilla" && f.minecraft.type !== "forge" && f.minecraft.type !== "fabric") {
         return { ...f, minecraft: { ...f.minecraft, type: "vanilla" } };
       }
       return f;
@@ -76,12 +77,13 @@ export const CreateMinecraftServerPage: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     setVersionsLoading(true);
-    apiGet<{ versions: string[]; latest: string; forge_versions?: { mc_version: string; forge_build: string; full_version: string }[] }>("/api/minecraft/versions")
+    apiGet<{ versions: string[]; latest: string; forge_versions?: { mc_version: string; forge_build: string; full_version: string }[]; fabric_versions?: { mc_version: string; loader_version: string; full_version: string }[] }>("/api/minecraft/versions")
       .then((res) => {
         if (!cancelled && res.versions?.length) {
           setVanillaVersions(res.versions);
           setVanillaLatest(res.latest || res.versions[0] || "");
           if (res.forge_versions?.length) setForgeVersions(res.forge_versions);
+          if (res.fabric_versions?.length) setFabricVersions(res.fabric_versions);
           setForm((f) => ({
             ...f,
             minecraft: {
@@ -110,6 +112,7 @@ export const CreateMinecraftServerPage: React.FC = () => {
       if (field === "type") {
         if (value === "vanilla" && vanillaLatest && !next.minecraft.version) next.minecraft.version = vanillaLatest;
         if (value === "forge" && forgeVersions.length && !next.minecraft.version) next.minecraft.version = forgeVersions[0].mc_version;
+        if (value === "fabric" && fabricVersions.length && !next.minecraft.version) next.minecraft.version = fabricVersions[0].mc_version;
       }
       return next;
     });
@@ -189,11 +192,12 @@ export const CreateMinecraftServerPage: React.FC = () => {
             <label>
               <span>Type</span>
               <select
-                value={form.minecraft.type === "vanilla" || form.minecraft.type === "forge" ? form.minecraft.type : "vanilla"}
+                value={form.minecraft.type === "vanilla" || form.minecraft.type === "forge" || form.minecraft.type === "fabric" ? form.minecraft.type : "vanilla"}
                 onChange={(e) => updateMinecraft("type", e.target.value as MinecraftConfig["type"])}
               >
                 <option value="vanilla">Vanilla</option>
                 <option value="forge">Forge</option>
+                <option value="fabric">Fabric</option>
               </select>
             </label>
             {form.minecraft.type === "vanilla" ? (
@@ -246,6 +250,33 @@ export const CreateMinecraftServerPage: React.FC = () => {
                     value={form.minecraft.version}
                     onChange={(e) => updateMinecraft("version", e.target.value)}
                     placeholder={versionsLoading ? "Chargement…" : "ex: 1.20.4"}
+                    disabled={versionsLoading}
+                  />
+                </label>
+              )
+            ) : form.minecraft.type === "fabric" ? (
+              fabricVersions.length > 0 ? (
+                <label>
+                  <span>Version (Fabric stable)</span>
+                  <select
+                    value={form.minecraft.version || fabricVersions[0]?.mc_version}
+                    onChange={(e) => updateMinecraft("version", e.target.value)}
+                    disabled={versionsLoading}
+                  >
+                    {fabricVersions.map((f) => (
+                      <option key={f.full_version} value={f.mc_version}>
+                        {f.mc_version} (Fabric {f.loader_version})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <label>
+                  <span>Version (Fabric)</span>
+                  <input
+                    value={form.minecraft.version}
+                    onChange={(e) => updateMinecraft("version", e.target.value)}
+                    placeholder={versionsLoading ? "Chargement…" : "ex: 1.21.1"}
                     disabled={versionsLoading}
                   />
                 </label>

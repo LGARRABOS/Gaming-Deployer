@@ -386,6 +386,16 @@ func runAnsibleMinecraft(ctx context.Context, req MinecraftDeploymentRequest, ho
 		extraVars["mc_forge_installer_url"] = installerURL
 		extraVars["mc_forge_full_version"] = fullVersion
 	}
+	// For Fabric, resolve installer URL and loader version; Ansible will run the installer (server mode).
+	if req.Minecraft.Type == minecraft.TypeFabric && strings.TrimSpace(req.Minecraft.Version) != "" {
+		installerURL, loaderVersion, err := minecraft.ResolveFabricInstallerParams(strings.TrimSpace(req.Minecraft.Version))
+		if err != nil {
+			return fmt.Errorf("résolution version Fabric: %w", err)
+		}
+		extraVars["mc_fabric_installer_url"] = installerURL
+		extraVars["mc_fabric_mc_version"] = strings.TrimSpace(req.Minecraft.Version)
+		extraVars["mc_fabric_loader_version"] = loaderVersion
+	}
 
 	extraJSON, err := json.Marshal(extraVars)
 	if err != nil {

@@ -115,20 +115,20 @@
             AllowTcpForwarding no
       notify: Restart sshd
 
-    # Vanilla: download server.jar when not using Forge.
+    # Vanilla: download server.jar when not using Forge or Fabric.
     - name: Download Minecraft server jar (vanilla)
       get_url:
         url: "{{ mc_server_jar_url | default('https://piston-data.mojang.com/v1/objects/64bb6d763bed0a9f1d632ec347938594144943ed/server.jar') }}"
         dest: "{{ mc_dir }}/server.jar"
         mode: "0644"
-      when: mc_forge_installer_url is not defined
+      when: mc_forge_installer_url is not defined and mc_fabric_installer_url is not defined
 
     - name: Set ownership of server jar
       file:
         path: "{{ mc_dir }}/server.jar"
         owner: "{{ mc_user }}"
         group: "{{ mc_user }}"
-      when: mc_forge_installer_url is not defined
+      when: mc_forge_installer_url is not defined and mc_fabric_installer_url is not defined
 
     # Forge: download installer and run --installServer (creates run.sh, libraries, etc.).
     - name: Download Forge installer
@@ -176,6 +176,28 @@
         group: "{{ mc_user }}"
         mode: "0644"
       when: mc_forge_installer_url is defined
+
+    # Fabric: download installer and run server mode (creates fabric-server-launch.jar).
+    - name: Download Fabric installer
+      get_url:
+        url: "{{ mc_fabric_installer_url }}"
+        dest: "{{ mc_dir }}/fabric-installer.jar"
+        mode: "0644"
+      when: mc_fabric_installer_url is defined
+
+    - name: Set ownership of Fabric installer
+      file:
+        path: "{{ mc_dir }}/fabric-installer.jar"
+        owner: "{{ mc_user }}"
+        group: "{{ mc_user }}"
+      when: mc_fabric_installer_url is defined
+
+    - name: Run Fabric installer (server)
+      shell: runuser -u "{{ mc_user }}" -- java -jar fabric-installer.jar server -mcversion "{{ mc_fabric_mc_version }}" -loader "{{ mc_fabric_loader_version }}"
+      args:
+        chdir: "{{ mc_dir }}"
+        creates: "{{ mc_dir }}/fabric-server-launch.jar"
+      when: mc_fabric_installer_url is defined
 
     - name: Render server.properties
       copy:
@@ -227,7 +249,7 @@
 
           [Install]
           WantedBy=multi-user.target
-      when: mc_forge_installer_url is not defined
+      when: mc_forge_installer_url is not defined and mc_fabric_installer_url is not defined
 
     - name: Create systemd service (Forge)
       copy:
@@ -248,6 +270,26 @@
           [Install]
           WantedBy=multi-user.target
       when: mc_forge_installer_url is defined
+
+    - name: Create systemd service (Fabric)
+      copy:
+        dest: /etc/systemd/system/{{ mc_service_name }}.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Minecraft Fabric Server
+          After=network.target
+
+          [Service]
+          WorkingDirectory={{ mc_dir }}
+          User={{ mc_user }}
+          Group={{ mc_user }}
+          Restart=always
+          ExecStart=/usr/bin/java -Xmx{{ mc_jvm_heap }} {{ mc_jvm_flags | default('') }} -jar fabric-server-launch.jar nogui
+
+          [Install]
+          WantedBy=multi-user.target
+      when: mc_fabric_installer_url is defined
 
     - name: Reload systemd
       systemd:
