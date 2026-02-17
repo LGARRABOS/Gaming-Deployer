@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	neturl "net/url"
 	"strings"
 )
 
@@ -76,6 +77,12 @@ func ValidateMinecraftRequest(req MinecraftDeploymentRequest) error {
 		}
 		if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 			return errors.New("minecraft.modpack_url must start with http:// or https://")
+		}
+		if u, err := neturl.Parse(url); err == nil {
+			host := strings.ToLower(u.Host)
+			if strings.Contains(host, "curseforge.com") && !strings.HasSuffix(u.Path, ".zip") {
+				return errors.New("minecraft.modpack_url doit être un lien direct vers le fichier .zip (CDN), par ex. https://media.forgecdn.net/.../mon-pack.zip, et non l'URL /download/ d'une page CurseForge. Ouvre le lien de téléchargement dans un nouvel onglet puis copie l'adresse finale du .zip.")
+			}
 		}
 	}
 	// Ports: main port optional (auto from base), but if present must be valid.

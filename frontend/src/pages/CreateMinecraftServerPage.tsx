@@ -319,10 +319,6 @@ export const CreateMinecraftServerPage: React.FC = () => {
                     onChange={(e) => updateMinecraft("modpack_url", e.target.value)}
                     placeholder="https://..."
                   />
-                  <p className="hint" style={{ marginTop: "0.4rem" }}>
-                    Colle ici l&apos;URL de téléchargement directe du server pack CurseForge (ZIP). L&apos;API n&apos;est pas utilisée ;
-                    le ZIP sera téléchargé et extrait automatiquement sur la VM.
-                  </p>
                 </label>
               </>
             )}
