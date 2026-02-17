@@ -43,17 +43,25 @@
     - { regexp: '^online-mode=', line: "online-mode={{ 'true' if mc_online_mode else 'false' }}" }
   when: mc_modpack_url is defined
 
-- name: Check if run.sh exists (Forge-style)
+- name: Check launch scripts (run.sh / start.sh / startserver.sh)
   stat:
-    path: "{{ mc_dir }}/run.sh"
-  register: mc_run_sh
+    path: "{{ item }}"
+  loop:
+    - "{{ mc_dir }}/run.sh"
+    - "{{ mc_dir }}/start.sh"
+    - "{{ mc_dir }}/startserver.sh"
+  register: mc_launch_scripts
   when: mc_modpack_url is defined
 
-- name: Make run.sh executable
+- name: Make launch scripts executable
   file:
-    path: "{{ mc_dir }}/run.sh"
+    path: "{{ item }}"
     mode: "0755"
-  when: mc_modpack_url is defined and mc_run_sh.stat.exists
+  loop:
+    - "{{ mc_dir }}/run.sh"
+    - "{{ mc_dir }}/start.sh"
+    - "{{ mc_dir }}/startserver.sh"
+  when: mc_modpack_url is defined
 
 - name: Check if server.jar exists (Mojang jar)
   stat:

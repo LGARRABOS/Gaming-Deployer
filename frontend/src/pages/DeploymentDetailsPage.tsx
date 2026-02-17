@@ -241,9 +241,6 @@ export const DeploymentDetailsPage: React.FC = () => {
         {activeTab === "ressources" && deployment.status === "success" && (
           <section className="card page-panel">
             <h2 className="page-panel-title">Ressources VM</h2>
-            <p className="page-panel-desc">
-              Modifier le CPU, la RAM et le disque de la VM. Les changements sont appliqués sur Proxmox. Proxmox ne permet pas de réduire la taille du disque (agrandissement uniquement).
-            </p>
             <p className="page-panel-notice">
               Si vous modifiez le CPU ou la RAM et que la VM est en marche, elle sera <strong>redémarrée automatiquement</strong> pour que les nouveaux paramètres soient pris en compte (cela peut prendre une à deux minutes).
             </p>

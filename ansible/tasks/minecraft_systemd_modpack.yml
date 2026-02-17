@@ -1,7 +1,9 @@
-- name: Detect modpack launcher (run.sh / fabric-server-launch.jar / server.jar)
+- name: Detect modpack launcher (start.sh / startserver.sh / run.sh / fabric-server-launch.jar / server.jar)
   stat:
     path: "{{ item }}"
   loop:
+    - "{{ mc_dir }}/start.sh"
+    - "{{ mc_dir }}/startserver.sh"
     - "{{ mc_dir }}/run.sh"
     - "{{ mc_dir }}/fabric-server-launch.jar"
     - "{{ mc_dir }}/server.jar"
@@ -10,11 +12,17 @@
 - name: Compute ExecStart for modpack service
   set_fact:
     mc_modpack_execstart: >-
-      {% set run = (mc_launchers.results[0].stat.exists | default(false)) %}
-      {% set fabric = (mc_launchers.results[1].stat.exists | default(false)) %}
-      {% set vanilla = (mc_launchers.results[2].stat.exists | default(false)) %}
-      {% if run %}
-      /bin/bash run.sh nogui
+      {% set start = (mc_launchers.results[0].stat.exists | default(false)) %}
+      {% set startserver = (mc_launchers.results[1].stat.exists | default(false)) %}
+      {% set run = (mc_launchers.results[2].stat.exists | default(false)) %}
+      {% set fabric = (mc_launchers.results[3].stat.exists | default(false)) %}
+      {% set vanilla = (mc_launchers.results[4].stat.exists | default(false)) %}
+      {% if start %}
+      /bin/bash start.sh
+      {% elif startserver %}
+      /bin/bash startserver.sh
+      {% elif run %}
+      /bin/bash run.sh
       {% elif fabric %}
       /usr/bin/java -Xmx{{ mc_jvm_heap }} {{ mc_jvm_flags | default('') }} -jar fabric-server-launch.jar nogui
       {% elif vanilla %}
