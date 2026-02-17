@@ -52,6 +52,30 @@
     - { regexp: '^online-mode=', line: "online-mode={{ 'true' if mc_online_mode else 'false' }}" }
   when: mc_modpack_url is defined
 
+- name: Relax ServerPackCreator Java check (disable Jabba, utiliser Java système)
+  lineinfile:
+    path: "{{ mc_dir }}/variables.txt"
+    regexp: '^SKIP_JAVA_CHECK\s*='
+    line: "SKIP_JAVA_CHECK=true"
+    create: false
+  when: mc_modpack_url is defined
+
+- name: Disable interactive wait on script end (ServerPackCreator)
+  lineinfile:
+    path: "{{ mc_dir }}/variables.txt"
+    regexp: '^WAIT_FOR_USER_INPUT\s*='
+    line: "WAIT_FOR_USER_INPUT=false"
+    create: false
+  when: mc_modpack_url is defined
+
+- name: Disable script-level restart loop (use systemd instead)
+  lineinfile:
+    path: "{{ mc_dir }}/variables.txt"
+    regexp: '^RESTART\s*='
+    line: "RESTART=false"
+    create: false
+  when: mc_modpack_url is defined
+
 - name: Check launch scripts (run.sh / start.sh / startserver.sh)
   stat:
     path: "{{ item }}"
