@@ -50,6 +50,9 @@
     - { regexp: '^motd=', line: "motd={{ mc_motd }}" }
     - { regexp: '^max-players=', line: "max-players={{ mc_max_players }}" }
     - { regexp: '^online-mode=', line: "online-mode={{ 'true' if mc_online_mode else 'false' }}" }
+    - { regexp: '^enable-rcon=', line: "enable-rcon={{ 'true' if (mc_rcon_enabled | default(true)) else 'false' }}" }
+    - { regexp: '^rcon.port=', line: "rcon.port={{ mc_rcon_port | default(25575) }}" }
+    - { regexp: '^rcon.password=', line: "rcon.password={{ mc_rcon_password }}" }
   when: mc_modpack_url is defined
 
 - name: Relax ServerPackCreator Java check (disable Jabba, utiliser Java système)

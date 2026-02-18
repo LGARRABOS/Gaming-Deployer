@@ -5,7 +5,7 @@ import { apiGet, apiPost } from "../api/client";
 interface MinecraftConfig {
   edition: "java";
   version: string;
-  type: "vanilla" | "paper" | "purpur" | "forge" | "fabric";
+  type: "vanilla" | "paper" | "purpur" | "forge" | "neoforge" | "fabric";
   modded: boolean;
   mods: { url: string; hash?: string }[];
   modpack_url?: string;
@@ -71,7 +71,7 @@ export const CreateMinecraftServerPage: React.FC = () => {
 
   useEffect(() => {
     setForm((f) => {
-      if (f.minecraft.type !== "vanilla" && f.minecraft.type !== "forge" && f.minecraft.type !== "fabric") {
+      if (f.minecraft.type !== "vanilla" && f.minecraft.type !== "forge" && f.minecraft.type !== "neoforge" && f.minecraft.type !== "fabric") {
         return { ...f, minecraft: { ...f.minecraft, type: "vanilla" } };
       }
       return f;
@@ -116,6 +116,7 @@ export const CreateMinecraftServerPage: React.FC = () => {
       if (field === "type") {
         if (value === "vanilla" && vanillaLatest && !next.minecraft.version) next.minecraft.version = vanillaLatest;
         if (value === "forge" && forgeVersions.length && !next.minecraft.version) next.minecraft.version = forgeVersions[0].mc_version;
+        if (value === "neoforge" && vanillaLatest && !next.minecraft.version) next.minecraft.version = vanillaLatest;
         if (value === "fabric" && fabricVersions.length && !next.minecraft.version) next.minecraft.version = fabricVersions[0].mc_version;
       }
       return next;
@@ -246,11 +247,19 @@ export const CreateMinecraftServerPage: React.FC = () => {
                 <label>
                   <span>Type</span>
                   <select
-                    value={form.minecraft.type === "vanilla" || form.minecraft.type === "forge" || form.minecraft.type === "fabric" ? form.minecraft.type : "vanilla"}
+                    value={
+                      form.minecraft.type === "vanilla" ||
+                      form.minecraft.type === "forge" ||
+                      form.minecraft.type === "neoforge" ||
+                      form.minecraft.type === "fabric"
+                        ? form.minecraft.type
+                        : "vanilla"
+                    }
                     onChange={(e) => updateMinecraft("type", e.target.value as MinecraftConfig["type"])}
                   >
                     <option value="vanilla">Vanilla</option>
                     <option value="forge">Forge</option>
+                    <option value="neoforge">NeoForge</option>
                     <option value="fabric">Fabric</option>
                   </select>
                 </label>
@@ -300,6 +309,33 @@ export const CreateMinecraftServerPage: React.FC = () => {
                   ) : (
                     <label>
                       <span>Version (Forge)</span>
+                      <input
+                        value={form.minecraft.version}
+                        onChange={(e) => updateMinecraft("version", e.target.value)}
+                        placeholder={versionsLoading ? "Chargement…" : "ex: 1.20.4"}
+                        disabled={versionsLoading}
+                      />
+                    </label>
+                  )
+                ) : form.minecraft.type === "neoforge" ? (
+                  vanillaVersions.length > 0 ? (
+                    <label>
+                      <span>Version (NeoForge 1.x.x)</span>
+                      <select
+                        value={form.minecraft.version || vanillaLatest || vanillaVersions[0] || ""}
+                        onChange={(e) => updateMinecraft("version", e.target.value)}
+                        disabled={versionsLoading}
+                      >
+                        {vanillaVersions.map((v) => (
+                          <option key={v} value={v}>
+                            {v}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <label>
+                      <span>Version (NeoForge)</span>
                       <input
                         value={form.minecraft.version}
                         onChange={(e) => updateMinecraft("version", e.target.value)}

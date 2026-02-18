@@ -408,6 +408,15 @@ func runAnsibleMinecraft(ctx context.Context, req MinecraftDeploymentRequest, ho
 			extraVars["mc_forge_installer_url"] = installerURL
 			extraVars["mc_forge_full_version"] = fullVersion
 		}
+		// For NeoForge, resolve installer URL based on Minecraft version; Ansible will run the installer (--installServer).
+		if req.Minecraft.Type == minecraft.TypeNeoForge && strings.TrimSpace(req.Minecraft.Version) != "" {
+			installerURL, fullVersion, err := minecraft.ResolveNeoForgeInstallerURL(strings.TrimSpace(req.Minecraft.Version))
+			if err != nil {
+				return fmt.Errorf("résolution version NeoForge: %w", err)
+			}
+			extraVars["mc_neoforge_installer_url"] = installerURL
+			extraVars["mc_neoforge_full_version"] = fullVersion
+		}
 		// For Fabric, resolve installer URL and loader version; Ansible will run the installer (server mode).
 		// Fabric's launcher also needs the vanilla server JAR at server.jar — we pass its URL for Ansible to download.
 		if req.Minecraft.Type == minecraft.TypeFabric && strings.TrimSpace(req.Minecraft.Version) != "" {

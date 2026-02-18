@@ -16,7 +16,7 @@
 
       [Install]
       WantedBy=multi-user.target
-  when: mc_forge_installer_url is not defined and mc_fabric_installer_url is not defined
+  when: mc_forge_installer_url is not defined and mc_neoforge_installer_url is not defined and mc_fabric_installer_url is not defined
 
 - name: Create systemd service (Forge)
   copy:
@@ -37,6 +37,26 @@
       [Install]
       WantedBy=multi-user.target
   when: mc_forge_installer_url is defined
+
+- name: Create systemd service (NeoForge)
+  copy:
+    dest: /etc/systemd/system/{{ mc_service_name }}.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Minecraft NeoForge Server
+      After=network.target
+
+      [Service]
+      WorkingDirectory={{ mc_dir }}
+      User={{ mc_user }}
+      Group={{ mc_user }}
+      Restart=always
+      ExecStart=/bin/bash run.sh nogui
+
+      [Install]
+      WantedBy=multi-user.target
+  when: mc_neoforge_installer_url is defined
 
 - name: Create systemd service (Fabric)
   copy:

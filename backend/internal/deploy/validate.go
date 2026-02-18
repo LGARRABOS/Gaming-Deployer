@@ -52,8 +52,8 @@ func ValidateMinecraftRequest(req MinecraftDeploymentRequest) error {
 		}
 	}
 
-	// Vanilla, Forge and Fabric: version is required (1.x.x release, e.g. 1.20.4).
-	if req.Minecraft.Type == "vanilla" || req.Minecraft.Type == "forge" || req.Minecraft.Type == "fabric" {
+	// Vanilla, Forge, NeoForge and Fabric: version is required (1.x.x release, e.g. 1.20.4).
+	if req.Minecraft.Type == "vanilla" || req.Minecraft.Type == "forge" || req.Minecraft.Type == "neoforge" || req.Minecraft.Type == "fabric" {
 		if strings.TrimSpace(req.Minecraft.Version) == "" {
 			return errors.New("minecraft.version is required (e.g. 1.20.4)")
 		}

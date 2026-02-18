@@ -15,11 +15,12 @@ const (
 type ServerType string
 
 const (
-	TypeVanilla ServerType = "vanilla"
-	TypePaper   ServerType = "paper"
-	TypePurpur  ServerType = "purpur"
-	TypeForge   ServerType = "forge"
-	TypeFabric  ServerType = "fabric"
+	TypeVanilla  ServerType = "vanilla"
+	TypePaper    ServerType = "paper"
+	TypePurpur   ServerType = "purpur"
+	TypeForge    ServerType = "forge"
+	TypeFabric   ServerType = "fabric"
+	TypeNeoForge ServerType = "neoforge"
 )
 
 // ModDescriptor describes a single mod to be installed.

@@ -12,6 +12,7 @@
     - import_tasks: tasks/minecraft_base.yml
     - import_tasks: tasks/minecraft_vanilla.yml
     - import_tasks: tasks/minecraft_forge.yml
+    - import_tasks: tasks/minecraft_neoforge.yml
     - import_tasks: tasks/minecraft_fabric.yml
     - import_tasks: tasks/minecraft_systemd.yml
 
