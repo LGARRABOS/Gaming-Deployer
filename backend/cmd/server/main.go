@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -23,8 +24,14 @@ func main() {
 
 	addr := getenv("APP_LISTEN_ADDR", ":5298")
 	dbPath := getenv("APP_DB_PATH", "./data/app.db")
+	if !filepath.IsAbs(dbPath) {
+		cwd, _ := os.Getwd()
+		dbPath = filepath.Join(cwd, dbPath)
+	}
+	dbPath, _ = filepath.Abs(dbPath)
+	log.Printf("database: %s", dbPath)
 
-	if err := os.MkdirAll("./data", 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
 		log.Fatalf("failed to create data dir: %v", err)
 	}
 
