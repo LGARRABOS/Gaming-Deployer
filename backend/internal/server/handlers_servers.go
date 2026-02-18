@@ -19,6 +19,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/gorcon/rcon"
 
+	"github.com/example/proxmox-game-deployer/internal/auth"
 	"github.com/example/proxmox-game-deployer/internal/config"
 	"github.com/example/proxmox-game-deployer/internal/db"
 	"github.com/example/proxmox-game-deployer/internal/deploy"
@@ -40,14 +41,32 @@ func (s *Server) logServerAction(ctx context.Context, deploymentID int64, action
 }
 
 // handleListServers returns Minecraft deployments that completed successfully (server list).
+// For role "user", only returns servers assigned to that user.
 func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.DB.Sql().QueryContext(r.Context(), `
-		SELECT id, request_json, result_json, vmid, ip_address, created_at
-		FROM deployments
-		WHERE game = ? AND status = ?
-		ORDER BY created_at DESC
-		LIMIT 100
-	`, "minecraft", string(deploy.StatusSuccess))
+	u := s.mustUser(r)
+	if u == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var rows *sql.Rows
+	var err error
+	if u.Role == auth.RoleUser {
+		rows, err = s.DB.Sql().QueryContext(r.Context(), `
+			SELECT id, request_json, result_json, vmid, ip_address, created_at
+			FROM deployments
+			WHERE game = ? AND status = ? AND assigned_to_user_id = ?
+			ORDER BY created_at DESC
+			LIMIT 100
+		`, "minecraft", string(deploy.StatusSuccess), u.ID)
+	} else {
+		rows, err = s.DB.Sql().QueryContext(r.Context(), `
+			SELECT id, request_json, result_json, vmid, ip_address, created_at
+			FROM deployments
+			WHERE game = ? AND status = ?
+			ORDER BY created_at DESC
+			LIMIT 100
+		`, "minecraft", string(deploy.StatusSuccess))
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -99,7 +118,13 @@ func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetServer returns a single server (deployment) with SFTP and config info.
+// Users with role "user" can only access servers assigned to them.
 func (s *Server) handleGetServer(w http.ResponseWriter, r *http.Request) {
+	u := s.mustUser(r)
+	if u == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -107,7 +132,7 @@ func (s *Server) handleGetServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	row := s.DB.Sql().QueryRowContext(r.Context(), `
-		SELECT id, request_json, result_json, vmid, ip_address, status, created_at
+		SELECT id, request_json, result_json, vmid, ip_address, status, assigned_to_user_id, created_at
 		FROM deployments
 		WHERE id = ? AND game = ? AND status = ?
 	`, id, "minecraft", string(deploy.StatusSuccess))
@@ -115,13 +140,18 @@ func (s *Server) handleGetServer(w http.ResponseWriter, r *http.Request) {
 	var resultJSON sql.NullString
 	var vmid sql.NullInt64
 	var status string
+	var assignedTo sql.NullInt64
 	var createdAt time.Time
-	if err := row.Scan(&id, &reqJSON, &resultJSON, &vmid, &ip, &status, &createdAt); err != nil {
+	if err := row.Scan(&id, &reqJSON, &resultJSON, &vmid, &ip, &status, &assignedTo, &createdAt); err != nil {
 		if err == sql.ErrNoRows {
 			http.NotFound(w, r)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if u.Role == auth.RoleUser && (!assignedTo.Valid || assignedTo.Int64 != u.ID) {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 	var req deploy.MinecraftDeploymentRequest

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPost } from "../api/client";
+import { useCurrentUser } from "../hooks/useCurrentUser";
 import { LogsViewer } from "../components/LogsViewer";
 
 interface DeploymentRecord {
@@ -13,8 +14,16 @@ interface DeploymentRecord {
   ip_address?: string;
   status: string;
   error_message?: string;
+  assigned_to_user_id?: number | null;
   created_at: string;
   updated_at: string;
+}
+
+interface UserItem {
+  id: number;
+  username: string;
+  role: string;
+  created_at: string;
 }
 
 function getMinecraftPortFromRequest(requestJson: string): number {
@@ -49,7 +58,12 @@ export const DeploymentDetailsPage: React.FC = () => {
   const [specsMessage, setSpecsMessage] = useState<string | null>(null);
   const [confirmingSpecs, setConfirmingSpecs] = useState(false);
   const [activeTab, setActiveTab] = useState<"logs" | "ressources">("logs");
+  const [users, setUsers] = useState<UserItem[]>([]);
+  const [assignUserId, setAssignUserId] = useState<number | "">("");
+  const [assignSaving, setAssignSaving] = useState(false);
   const navigate = useNavigate();
+  const { user: currentUser } = useCurrentUser();
+  const canAssign = currentUser?.role === "owner" || currentUser?.role === "admin";
 
   const fetchSpecs = useCallback(async () => {
     if (!deploymentId) return;
@@ -89,6 +103,35 @@ export const DeploymentDetailsPage: React.FC = () => {
   useEffect(() => {
     if (deployment?.status === "success") fetchSpecs();
   }, [deployment?.status, fetchSpecs]);
+
+  useEffect(() => {
+    if (!canAssign || deployment?.status !== "success") return;
+    apiGet<UserItem[]>("/api/users")
+      .then((data) => setUsers(Array.isArray(data) ? data : []))
+      .catch(() => setUsers([]));
+  }, [canAssign, deployment?.status]);
+
+  useEffect(() => {
+    if (deployment?.assigned_to_user_id != null) setAssignUserId(deployment.assigned_to_user_id);
+    else setAssignUserId("");
+  }, [deployment?.assigned_to_user_id]);
+
+  const onAssign = async () => {
+    if (!deploymentId) return;
+    setAssignSaving(true);
+    try {
+      await apiPost(
+        `/api/deployments/${deploymentId}/assign`,
+        { user_id: assignUserId === "" ? null : assignUserId },
+        "PUT"
+      );
+      setDeployment((d) =>
+        d ? { ...d, assigned_to_user_id: assignUserId === "" ? null : (assignUserId as number) } : d
+      );
+    } finally {
+      setAssignSaving(false);
+    }
+  };
 
   const onSaveSpecsSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -201,14 +244,46 @@ export const DeploymentDetailsPage: React.FC = () => {
       </div>
 
       {deployment.status === "success" && (
-        <div className="card page-panel">
-          <p className="page-panel-desc">
-            Le serveur est déployé. Pour le gérer (démarrage, arrêt, configuration, SFTP) :{" "}
-            <Link to={`/servers/${deployment.id}`} className="link-cta">
-              Ouvrir le tableau de bord serveur →
-            </Link>
-          </p>
-        </div>
+        <>
+          <div className="card page-panel">
+            <p className="page-panel-desc">
+              Le serveur est déployé. Pour le gérer (démarrage, arrêt, configuration, SFTP) :{" "}
+              <Link to={`/servers/${deployment.id}`} className="link-cta">
+                Ouvrir le tableau de bord serveur →
+              </Link>
+            </p>
+          </div>
+          {canAssign && (
+            <div className="card page-panel">
+              <h2 className="page-panel-title">Attribuer à un utilisateur</h2>
+              <p className="page-panel-desc">
+                L'utilisateur attribué pourra voir et gérer ce serveur depuis la page Serveurs Minecraft.
+              </p>
+              <div className="form-actions" style={{ flexWrap: "wrap", gap: "0.75rem" }}>
+                <select
+                  value={assignUserId === "" ? "" : assignUserId}
+                  onChange={(e) => setAssignUserId(e.target.value === "" ? "" : Number(e.target.value))}
+                  style={{ minWidth: "180px" }}
+                >
+                  <option value="">— Non attribué —</option>
+                  {users.filter((u) => u.role === "user").map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.username}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  disabled={assignSaving}
+                  onClick={onAssign}
+                >
+                  {assignSaving ? "Enregistrement…" : "Enregistrer"}
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       <div className="deployment-detail-tabs">

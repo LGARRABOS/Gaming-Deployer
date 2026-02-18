@@ -138,9 +138,9 @@ func (s *Server) handleInitialize(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO users (username, password_hash, created_at)
-			VALUES (?, ?, ?)
-		`, req.Admin.Username, pwHash, time.Now().UTC()); err != nil {
+			INSERT INTO users (username, password_hash, role, created_at)
+			VALUES (?, ?, ?, ?)
+		`, req.Admin.Username, pwHash, auth.RoleOwner, time.Now().UTC()); err != nil {
 			return err
 		}
 		if err := config.MarkInitialized(ctx, tx); err != nil {

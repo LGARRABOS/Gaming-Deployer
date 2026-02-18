@@ -1,10 +1,13 @@
 import React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { apiPost } from "../api/client";
+import { useCurrentUser, type UserRole } from "../hooks/useCurrentUser";
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, loading: userLoading } = useCurrentUser();
+  const role: UserRole | null = user?.role ?? null;
 
   const onLogout = async () => {
     try {
@@ -25,6 +28,19 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const isDeploymentsActive =
     location.pathname === "/deployments" ||
     (location.pathname.startsWith("/deployments/") && !location.pathname.startsWith("/deployments/new"));
+
+  const canSeeDeployments = role === "owner" || role === "admin";
+  const canSeeSettings = role === "owner";
+  const canSeeUsers = role === "owner";
+
+  // Utilisateur : accès uniquement à la page Serveurs Minecraft
+  if (!userLoading && role === "user") {
+    const p = location.pathname;
+    if (p === "/" || p.startsWith("/deployments") || p === "/settings" || p.startsWith("/users")) {
+      navigate(p === "/" ? "/servers" : "/servers", { replace: true });
+      return null;
+    }
+  }
 
   if (isAuthScreen) {
     return (
@@ -49,30 +65,44 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             <p className="app-subtitle">Dashboard jeux &amp; VMs</p>
           </div>
           <nav className="sidebar-nav">
-            <Link
-              to="/deployments"
-              className={isDeploymentsActive ? "sidebar-link sidebar-link--active" : "sidebar-link"}
-            >
-              Déploiements
-            </Link>
+            {canSeeDeployments && (
+              <>
+                <Link
+                  to="/deployments"
+                  className={isDeploymentsActive ? "sidebar-link sidebar-link--active" : "sidebar-link"}
+                >
+                  Déploiements
+                </Link>
+                <Link
+                  to="/deployments/new/minecraft"
+                  className={isActive("/deployments/new/minecraft") ? "sidebar-link sidebar-link--active" : "sidebar-link"}
+                >
+                  Nouveau serveur Minecraft
+                </Link>
+              </>
+            )}
             <Link
               to="/servers"
               className={isActive("/servers") ? "sidebar-link sidebar-link--active" : "sidebar-link"}
             >
               Serveurs Minecraft
             </Link>
-            <Link
-              to="/deployments/new/minecraft"
-              className={isActive("/deployments/new/minecraft") ? "sidebar-link sidebar-link--active" : "sidebar-link"}
-            >
-              Nouveau serveur Minecraft
-            </Link>
-            <Link
-              to="/settings"
-              className={isActive("/settings") ? "sidebar-link sidebar-link--active" : "sidebar-link"}
-            >
-              Paramètres
-            </Link>
+            {canSeeUsers && (
+              <Link
+                to="/users"
+                className={isActive("/users") ? "sidebar-link sidebar-link--active" : "sidebar-link"}
+              >
+                Utilisateurs
+              </Link>
+            )}
+            {canSeeSettings && (
+              <Link
+                to="/settings"
+                className={isActive("/settings") ? "sidebar-link sidebar-link--active" : "sidebar-link"}
+              >
+                Paramètres
+              </Link>
+            )}
           </nav>
           <button className="sidebar-logout" onClick={onLogout}>
             Déconnexion
@@ -89,6 +119,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 ? "Tableau de bord serveur"
                 : location.pathname === "/servers"
                 ? "Serveurs Minecraft"
+                : location.pathname.startsWith("/users")
+                ? "Utilisateurs"
+                : location.pathname === "/settings"
+                ? "Paramètres"
                 : "Déploiements"}
             </span>
           </header>

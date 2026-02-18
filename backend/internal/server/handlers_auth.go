@@ -15,6 +15,7 @@ type loginRequest struct {
 
 type meResponse struct {
 	Username string `json:"username"`
+	Role     string `json:"role"` // owner, admin, user
 }
 
 // handleLogin authenticates and sets a session cookie.
@@ -39,7 +40,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	setSessionCookie(w, sess.ID, sess.ExpiresAt)
-	writeJSON(w, http.StatusOK, meResponse{Username: u.Username})
+	writeJSON(w, http.StatusOK, meResponse{Username: u.Username, Role: u.Role})
 }
 
 // handleLogout deletes the current session.
@@ -58,8 +59,8 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleMe returns info about current user.
+// handleMe returns info about current user (including role).
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request, u *auth.User) {
-	writeJSON(w, http.StatusOK, meResponse{Username: u.Username})
+	writeJSON(w, http.StatusOK, meResponse{Username: u.Username, Role: u.Role})
 }
 

@@ -10,6 +10,7 @@ import { ServersListPage } from "./pages/ServersListPage";
 import { ServerDashboardPage } from "./pages/ServerDashboardPage";
 import { useAppStatus } from "./hooks/useAppStatus";
 import { SettingsPage } from "./pages/SettingsPage";
+import { UsersPage } from "./pages/UsersPage";
 
 const AppRoutes: React.FC = () => {
   const location = useLocation();
@@ -51,6 +52,14 @@ const AppRoutes: React.FC = () => {
         element={
           <Layout>
             <CreateMinecraftServerPage />
+          </Layout>
+        }
+      />
+      <Route
+        path="/users"
+        element={
+          <Layout>
+            <UsersPage />
           </Layout>
         }
       />

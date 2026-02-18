@@ -12,16 +12,25 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// Role is the user's role: owner (propriétaire), admin, or user (utilisateur).
+const (
+	RoleOwner = "owner"
+	RoleAdmin = "admin"
+	RoleUser  = "user"
+)
+
 // User represents an authenticated user.
 type User struct {
 	ID        int64
 	Username  string
+	Role      string // owner, admin, user
 	CreatedAt time.Time
 }
 
 // Store is the subset of DB operations used by the auth package.
 type Store interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 	WithTx(ctx context.Context, fn func(tx *sql.Tx) error) error
 }
@@ -45,8 +54,11 @@ func VerifyPassword(hash, plaintext string) error {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(plaintext))
 }
 
-// CreateUser creates a new user with the given username and password.
-func CreateUser(ctx context.Context, db Store, username, password string) (*User, error) {
+// CreateUser creates a new user with the given username, password and role.
+func CreateUser(ctx context.Context, db Store, username, password, role string) (*User, error) {
+	if role == "" {
+		role = RoleUser
+	}
 	pwHash, err := HashPassword(password)
 	if err != nil {
 		return nil, err
@@ -56,9 +68,9 @@ func CreateUser(ctx context.Context, db Store, username, password string) (*User
 	now := time.Now().UTC()
 	err = db.WithTx(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `
-			INSERT INTO users (username, password_hash, created_at)
-			VALUES (?, ?, ?)
-		`, username, pwHash, now)
+			INSERT INTO users (username, password_hash, role, created_at)
+			VALUES (?, ?, ?, ?)
+		`, username, pwHash, role, now)
 		if err != nil {
 			return err
 		}
@@ -68,26 +80,81 @@ func CreateUser(ctx context.Context, db Store, username, password string) (*User
 	if err != nil {
 		return nil, err
 	}
-	return &User{ID: id, Username: username, CreatedAt: now}, nil
+	return &User{ID: id, Username: username, Role: role, CreatedAt: now}, nil
 }
 
 // GetUserByUsername fetches a user by username.
 func GetUserByUsername(ctx context.Context, db Store, username string) (*User, string, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT id, username, password_hash, created_at
+		SELECT id, username, password_hash, COALESCE(role, 'user'), created_at
 		FROM users
 		WHERE username = ?
 	`, username)
 
 	var u User
 	var hash string
-	if err := row.Scan(&u.ID, &u.Username, &hash, &u.CreatedAt); err != nil {
+	if err := row.Scan(&u.ID, &u.Username, &hash, &u.Role, &u.CreatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, "", ErrInvalidCredentials
 		}
 		return nil, "", err
 	}
 	return &u, hash, nil
+}
+
+// GetUserByID fetches a user by ID.
+func GetUserByID(ctx context.Context, db Store, id int64) (*User, error) {
+	row := db.QueryRowContext(ctx, `
+		SELECT id, username, COALESCE(role, 'user'), created_at
+		FROM users
+		WHERE id = ?
+	`, id)
+	var u User
+	if err := row.Scan(&u.ID, &u.Username, &u.Role, &u.CreatedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &u, nil
+}
+
+// ListUsers returns all users (for owner only).
+func ListUsers(ctx context.Context, db Store) ([]User, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, username, COALESCE(role, 'user'), created_at
+		FROM users
+		ORDER BY id ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Username, &u.Role, &u.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, u)
+	}
+	return list, rows.Err()
+}
+
+// UpdateUserRole sets a user's role (owner only; only owner can set admin).
+func UpdateUserRole(ctx context.Context, db Store, userID int64, role string) error {
+	if role != RoleAdmin && role != RoleUser {
+		return errors.New("invalid role")
+	}
+	res, err := db.ExecContext(ctx, `UPDATE users SET role = ? WHERE id = ?`, role, userID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 // Session represents an authenticated session stored in DB.

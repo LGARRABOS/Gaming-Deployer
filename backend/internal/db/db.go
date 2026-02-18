@@ -55,6 +55,11 @@ func (d *DB) QueryRowContext(ctx context.Context, query string, args ...any) *sq
 	return d.sql.QueryRowContext(ctx, query, args...)
 }
 
+// QueryContext wraps sql.DB.QueryContext.
+func (d *DB) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return d.sql.QueryContext(ctx, query, args...)
+}
+
 // Sql exposes the underlying *sql.DB for advanced queries.
 func (d *DB) Sql() *sql.DB {
 	return d.sql

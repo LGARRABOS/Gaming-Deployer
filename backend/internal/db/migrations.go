@@ -18,6 +18,7 @@ func (d *DB) Migrate(ctx context.Context) error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			username TEXT NOT NULL UNIQUE,
 			password_hash TEXT NOT NULL,
+			role TEXT NOT NULL DEFAULT 'user',
 			created_at DATETIME NOT NULL
 		);`,
 		// sessions: cookie-based sessions
@@ -28,7 +29,7 @@ func (d *DB) Migrate(ctx context.Context) error {
 			created_at DATETIME NOT NULL,
 			FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 		);`,
-		// deployments: high-level deployment records
+		// deployments: high-level deployment records (assigned_to_user_id = utilisateur qui gère le serveur)
 		`CREATE TABLE IF NOT EXISTS deployments (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			game TEXT NOT NULL,
@@ -39,8 +40,10 @@ func (d *DB) Migrate(ctx context.Context) error {
 			ip_address TEXT,
 			status TEXT NOT NULL,
 			error_message TEXT,
+			assigned_to_user_id INTEGER,
 			created_at DATETIME NOT NULL,
-			updated_at DATETIME NOT NULL
+			updated_at DATETIME NOT NULL,
+			FOREIGN KEY(assigned_to_user_id) REFERENCES users(id) ON DELETE SET NULL
 		);`,
 		// deployment_logs: append-only logs for each deployment
 		`CREATE TABLE IF NOT EXISTS deployment_logs (
@@ -96,6 +99,16 @@ func (d *DB) Migrate(ctx context.Context) error {
 		if _, err := d.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("migration %d failed: %w", i, err)
 		}
+	}
+
+	// Migrations pour bases existantes : ajout colonne role (users) et assigned_to_user_id (deployments).
+	alterStmts := []string{
+		`ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'`,
+		`UPDATE users SET role = 'owner' WHERE id = (SELECT id FROM users ORDER BY id ASC LIMIT 1) AND NOT EXISTS (SELECT 1 FROM users WHERE role = 'owner')`,
+		`ALTER TABLE deployments ADD COLUMN assigned_to_user_id INTEGER REFERENCES users(id)`,
+	}
+	for _, stmt := range alterStmts {
+		_, _ = d.ExecContext(ctx, stmt) // ignorer erreur si colonne déjà présente
 	}
 	return nil
 }

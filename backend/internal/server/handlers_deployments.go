@@ -106,33 +106,35 @@ func (s *Server) handleGetDeployment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	row := s.DB.Sql().QueryRowContext(r.Context(), `
-		SELECT id, game, type, request_json, result_json, vmid, ip_address, status, error_message, created_at, updated_at
+		SELECT id, game, type, request_json, result_json, vmid, ip_address, status, error_message, assigned_to_user_id, created_at, updated_at
 		FROM deployments
 		WHERE id = ?
 	`, id)
 	var record struct {
-		ID          int64   `json:"id"`
-		Game        string  `json:"game"`
-		Type        string  `json:"type"`
-		RequestJSON string  `json:"request_json"`
-		ResultJSON  *string `json:"result_json,omitempty"`
-		VMID        *int64  `json:"vmid,omitempty"`
-		IP          *string `json:"ip_address,omitempty"`
-		Status      string  `json:"status"`
-		Error       *string `json:"error_message,omitempty"`
-		CreatedAt   string  `json:"created_at"`
-		UpdatedAt   string  `json:"updated_at"`
+		ID               int64   `json:"id"`
+		Game             string  `json:"game"`
+		Type             string  `json:"type"`
+		RequestJSON      string  `json:"request_json"`
+		ResultJSON       *string `json:"result_json,omitempty"`
+		VMID             *int64  `json:"vmid,omitempty"`
+		IP               *string `json:"ip_address,omitempty"`
+		Status           string  `json:"status"`
+		Error            *string `json:"error_message,omitempty"`
+		AssignedToUserID *int64  `json:"assigned_to_user_id,omitempty"`
+		CreatedAt        string  `json:"created_at"`
+		UpdatedAt        string  `json:"updated_at"`
 	}
 	var vmid sql.NullInt64
 	var ip sql.NullString
 	var result sql.NullString
 	var errMsg sql.NullString
+	var assignedTo sql.NullInt64
 	var created, updated time.Time
 	if err := row.Scan(
 		&record.ID, &record.Game, &record.Type,
 		&record.RequestJSON, &result,
 		&vmid, &ip, &record.Status, &errMsg,
-		&created, &updated,
+		&assignedTo, &created, &updated,
 	); err != nil {
 		if err == sql.ErrNoRows {
 			http.NotFound(w, r)
@@ -156,6 +158,10 @@ func (s *Server) handleGetDeployment(w http.ResponseWriter, r *http.Request) {
 	if errMsg.Valid {
 		str := errMsg.String
 		record.Error = &str
+	}
+	if assignedTo.Valid {
+		v := assignedTo.Int64
+		record.AssignedToUserID = &v
 	}
 	record.CreatedAt = created.Format(time.RFC3339)
 	record.UpdatedAt = updated.Format(time.RFC3339)
@@ -318,5 +324,49 @@ func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) 
 	`, deploymentID)
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type assignDeploymentRequest struct {
+	UserID *int64 `json:"user_id"` // nil = désassigner
+}
+
+// handleAssignDeployment assigns a deployment (server) to a user so they can manage it (admin/owner only).
+func (s *Server) handleAssignDeployment(w http.ResponseWriter, r *http.Request) {
+	u := s.mustUser(r)
+	if u == nil || (u.Role != auth.RoleOwner && u.Role != auth.RoleAdmin) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	idStr := chi.URLParam(r, "id")
+	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	var req assignDeploymentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	var res sql.Result
+	if req.UserID == nil {
+		res, err = s.DB.Sql().ExecContext(r.Context(), `
+			UPDATE deployments SET assigned_to_user_id = NULL WHERE id = ? AND game = ?
+		`, deploymentID, "minecraft")
+	} else {
+		res, err = s.DB.Sql().ExecContext(r.Context(), `
+			UPDATE deployments SET assigned_to_user_id = ? WHERE id = ? AND game = ?
+		`, *req.UserID, deploymentID, "minecraft")
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	writeJSON(w, http.StatusOK, genericOKResponse{OK: true})
 }
 
