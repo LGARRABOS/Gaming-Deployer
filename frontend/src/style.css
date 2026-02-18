@@ -50,8 +50,14 @@
   box-sizing: border-box;
 }
 
+html {
+  height: 100%;
+  scrollbar-gutter: stable;
+}
+
 body {
   margin: 0;
+  min-height: 100%;
   font-family: var(--font-sans);
   font-size: 15px;
   line-height: 1.5;
@@ -73,6 +79,7 @@ a:hover {
 .app-root {
   min-height: 100vh;
   display: flex;
+  overflow: hidden;
 }
 
 .app-shell {
@@ -81,6 +88,14 @@ a:hover {
   max-width: 1400px;
   margin: 0 auto;
   min-height: 100vh;
+  overflow: hidden;
+  flex: 1;
+}
+
+.app-shell .main-layout {
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
 }
 
 /* ----- Sidebar ----- */
