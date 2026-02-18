@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { apiGet, apiPost } from "../api/client";
+import { useCurrentUser } from "../hooks/useCurrentUser";
 
 interface UserItem {
   id: number;
@@ -19,6 +20,7 @@ interface ServerItem {
 }
 
 export const UsersPage: React.FC = () => {
+  const { user: currentUser } = useCurrentUser();
   const [list, setList] = useState<UserItem[]>([]);
   const [servers, setServers] = useState<ServerItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,6 +64,7 @@ export const UsersPage: React.FC = () => {
   };
 
   const selectedUser = selectedUserId ? list.find((u) => u.id === selectedUserId) ?? null : null;
+  const isOwner = currentUser?.role === "owner";
 
   const filteredUsers = list.filter((u) => {
     const q = query.trim().toLowerCase();
@@ -119,7 +122,7 @@ export const UsersPage: React.FC = () => {
       <header className="page-header">
         <h1>Utilisateurs</h1>
         <p className="page-subtitle">
-          Créer des comptes et promouvoir des utilisateurs en administrateur. Seul le propriétaire peut gérer cette page.
+          Liste des comptes et serveurs associés. Le propriétaire peut promouvoir les rôles, les administrateurs peuvent seulement consulter et gérer les associations de serveurs.
         </p>
       </header>
 
@@ -155,7 +158,7 @@ export const UsersPage: React.FC = () => {
             <tr>
               <th>Utilisateur</th>
               <th>Rôle</th>
-              <th>Actions</th>
+              <th>Actions (propriétaire uniquement)</th>
             </tr>
           </thead>
           <tbody>
@@ -180,26 +183,31 @@ export const UsersPage: React.FC = () => {
                   </span>
                 </td>
                 <td>
-                  {u.role === "owner" && <span className="hint">—</span>}
-                  {u.role === "admin" && (
-                    <button
-                      type="button"
-                      className="btn btn--secondary btn--small"
-                      disabled={updatingId === u.id}
-                      onClick={() => setRole(u.id, "user")}
-                    >
-                      {updatingId === u.id ? "…" : "Rétrograder en utilisateur"}
-                    </button>
-                  )}
-                  {u.role === "user" && (
-                    <button
-                      type="button"
-                      className="btn btn--primary btn--small"
-                      disabled={updatingId === u.id}
-                      onClick={() => setRole(u.id, "admin")}
-                    >
-                      {updatingId === u.id ? "…" : "Promouvoir en admin"}
-                    </button>
+                  {!isOwner && <span className="hint">Lecture seule</span>}
+                  {isOwner && (
+                    <>
+                      {u.role === "owner" && <span className="hint">—</span>}
+                      {u.role === "admin" && (
+                        <button
+                          type="button"
+                          className="btn btn--secondary btn--small"
+                          disabled={updatingId === u.id}
+                          onClick={() => setRole(u.id, "user")}
+                        >
+                          {updatingId === u.id ? "…" : "Rétrograder en utilisateur"}
+                        </button>
+                      )}
+                      {u.role === "user" && (
+                        <button
+                          type="button"
+                          className="btn btn--primary btn--small"
+                          disabled={updatingId === u.id}
+                          onClick={() => setRole(u.id, "admin")}
+                        >
+                          {updatingId === u.id ? "…" : "Promouvoir en admin"}
+                        </button>
+                      )}
+                    </>
                   )}
                 </td>
               </tr>

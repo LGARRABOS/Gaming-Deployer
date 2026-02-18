@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
+import { useCurrentUser } from "../hooks/useCurrentUser";
 
 interface ServerItem {
   id: number;
@@ -12,6 +13,7 @@ interface ServerItem {
 }
 
 export const ServersListPage: React.FC = () => {
+  const { user } = useCurrentUser();
   const [servers, setServers] = useState<ServerItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +64,17 @@ export const ServersListPage: React.FC = () => {
         <div className="card servers-empty">
           <div className="servers-empty-icon">🖥️</div>
           <h2>Aucun serveur</h2>
-          <p>Créez un serveur Minecraft depuis la page <Link to="/deployments/new/minecraft">Nouveau déploiement</Link>.</p>
+          {user?.role === "owner" || user?.role === "admin" ? (
+            <p>
+              Créez un serveur Minecraft depuis la page{" "}
+              <Link to="/deployments/new/minecraft">Nouveau déploiement</Link>.
+            </p>
+          ) : (
+            <p className="hint">
+              Aucun serveur n’est encore associé à votre compte. Un administrateur ou le propriétaire peut vous attribuer
+              un serveur existant.
+            </p>
+          )}
         </div>
       ) : (
         <ul className="servers-grid">

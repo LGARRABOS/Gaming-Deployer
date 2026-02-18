@@ -31,7 +31,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
   const canSeeDeployments = role === "owner" || role === "admin";
   const canSeeSettings = role === "owner";
-  const canSeeUsers = role === "owner";
+  const canSeeUsers = role === "owner" || role === "admin";
 
   // Utilisateur : accès uniquement à la page Serveurs Minecraft
   if (!userLoading && role === "user") {
