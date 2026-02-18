@@ -104,12 +104,23 @@ func (d *DB) Migrate(ctx context.Context) error {
 	// Migrations pour bases existantes : ajout colonne role (users) et assigned_to_user_id (deployments).
 	alterStmts := []string{
 		`ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'`,
-		`UPDATE users SET role = 'owner' WHERE id = (SELECT id FROM users ORDER BY id ASC LIMIT 1) AND NOT EXISTS (SELECT 1 FROM users WHERE role = 'owner')`,
 		`ALTER TABLE deployments ADD COLUMN assigned_to_user_id INTEGER REFERENCES users(id)`,
 	}
 	for _, stmt := range alterStmts {
 		_, _ = d.ExecContext(ctx, stmt) // ignorer erreur si colonne déjà présente
 	}
+
+	// Promouvoir le premier utilisateur en owner s'il n'y en a pas encore.
+	var ownerCount int
+	_ = d.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE role = 'owner'`).Scan(&ownerCount)
+	if ownerCount == 0 {
+		var firstUserID int64
+		err := d.QueryRowContext(ctx, `SELECT id FROM users ORDER BY id ASC LIMIT 1`).Scan(&firstUserID)
+		if err == nil {
+			_, _ = d.ExecContext(ctx, `UPDATE users SET role = 'owner' WHERE id = ?`, firstUserID)
+		}
+	}
+
 	return nil
 }
 
