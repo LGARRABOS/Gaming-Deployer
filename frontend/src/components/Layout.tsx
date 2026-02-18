@@ -21,6 +21,11 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const isActive = (path: string) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
 
+  // Déploiements = actif uniquement sur la liste ou le détail d'un déploiement, pas sur "nouveau"
+  const isDeploymentsActive =
+    location.pathname === "/deployments" ||
+    (location.pathname.startsWith("/deployments/") && !location.pathname.startsWith("/deployments/new"));
+
   if (isAuthScreen) {
     return (
       <div className="auth-root">
@@ -46,7 +51,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           <nav className="sidebar-nav">
             <Link
               to="/deployments"
-              className={isActive("/deployments") ? "sidebar-link sidebar-link--active" : "sidebar-link"}
+              className={isDeploymentsActive ? "sidebar-link sidebar-link--active" : "sidebar-link"}
             >
               Déploiements
             </Link>
