@@ -177,9 +177,9 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 		}
 	}
 
-	// Auto JVM heap if not set: VM memory - 2GB, minimum 1G.
+	// Auto JVM heap if not set: VM memory - 1GB, minimum 1G.
 	if req.Minecraft.JVMHeap == "" {
-		heapMB := req.MemoryMB - 2048
+		heapMB := req.MemoryMB - 1024
 		if heapMB < 1024 {
 			heapMB = 1024
 		}

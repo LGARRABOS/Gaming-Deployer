@@ -775,6 +775,48 @@ func (s *Server) handleGetServerSpecs(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func calcMinecraftHeap(vmMemoryMB int) string {
+	heapMB := vmMemoryMB - 1024 // règle: RAM MC = RAM VM - 1 Go
+	if heapMB < 1024 {
+		heapMB = 1024
+	}
+	return fmt.Sprintf("%dM", heapMB)
+}
+
+func (s *Server) applyMinecraftHeapOnVM(ctx context.Context, deploymentID int64, heap string) error {
+	ip, sshUser, err := s.getServerSSHTarget(ctx, deploymentID)
+	if err != nil {
+		return err
+	}
+	mcDir, mcUser, err := s.getServerMinecraftPath(ctx, deploymentID)
+	if err != nil {
+		return err
+	}
+	keyPath := sshexec.KeyPath()
+
+	// We support:
+	// - Forge/NeoForge: mc_dir/user_jvm_args.txt contains -Xmx...
+	// - Vanilla/Fabric/Some modpacks: /etc/systemd/system/minecraft.service ExecStart contains -Xmx...
+	cmd := fmt.Sprintf(
+		`sudo bash -lc 'set -euo pipefail
+if [ -f "%[1]s/user_jvm_args.txt" ]; then
+  sed -i -E "s/-Xmx[^ ]+/-Xmx%[3]s/" "%[1]s/user_jvm_args.txt"
+  chown "%[2]s:%[2]s" "%[1]s/user_jvm_args.txt"
+fi
+if [ -f /etc/systemd/system/minecraft.service ]; then
+  sed -i -E "s/-Xmx[^ ]+/-Xmx%[3]s/" /etc/systemd/system/minecraft.service
+  systemctl daemon-reload
+  systemctl restart minecraft
+fi'`,
+		mcDir, mcUser, heap,
+	)
+	_, stderr, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, cmd)
+	if err != nil {
+		return fmt.Errorf("update heap on vm: %w: %s", err, strings.TrimSpace(stderr))
+	}
+	return nil
+}
+
 // handleUpdateServerSpecs updates VM resources in Proxmox and in the deployment request_json.
 func (s *Server) handleUpdateServerSpecs(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
@@ -813,6 +855,12 @@ func (s *Server) handleUpdateServerSpecs(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	cpuOrRamChanged := body.Cores != req.Cores || body.MemoryMB != req.MemoryMB
+	ramChanged := body.MemoryMB != req.MemoryMB
+	var newHeap string
+	if ramChanged {
+		newHeap = calcMinecraftHeap(body.MemoryMB)
+		req.Minecraft.JVMHeap = newHeap
+	}
 
 	if err := client.UpdateVMConfig(ctx, node, int(vmid), body.Cores, body.MemoryMB); err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "Proxmox config: " + err.Error()})
@@ -875,11 +923,41 @@ func (s *Server) handleUpdateServerSpecs(w http.ResponseWriter, r *http.Request)
 	_, _ = s.DB.Sql().ExecContext(ctx, `UPDATE deployments SET request_json = ?, updated_at = ? WHERE id = ?`, string(rawReq), time.Now().UTC(), deploymentID)
 
 	resp := map[string]any{"ok": true}
+	var heapApplied bool
+	if ramChanged {
+		resp["minecraft_heap"] = newHeap
+		// Apply on VM if it's currently running (or just restarted).
+		cur, errStatus := client.GetVMStatusCurrent(ctx, node, int(vmid))
+		if errStatus == nil && cur != nil && cur.Status == "running" {
+			ip, _, errSSH := s.getServerSSHTarget(ctx, deploymentID)
+			if errSSH == nil && ip != "" {
+				_ = client.WaitForSSH(ctx, ip, 22, 5*time.Minute)
+				if err := s.applyMinecraftHeapOnVM(ctx, deploymentID, newHeap); err == nil {
+					heapApplied = true
+				} else {
+					resp["minecraft_heap_warning"] = "La VM a été redimensionnée, mais la mise à jour de la RAM Java (Minecraft) a échoué: " + err.Error()
+				}
+			}
+		}
+		if heapApplied {
+			resp["minecraft_heap_applied"] = true
+		} else {
+			resp["minecraft_heap_applied"] = false
+		}
+	}
 	if vmRestarted {
 		resp["vm_restarted"] = true
-		resp["message"] = "Ressources mises à jour. La VM a été redémarrée pour appliquer les nouveaux CPU et RAM."
+		if ramChanged && heapApplied {
+			resp["message"] = "Ressources mises à jour. La VM a été redémarrée et la RAM Minecraft a été ajustée automatiquement."
+		} else {
+			resp["message"] = "Ressources mises à jour. La VM a été redémarrée pour appliquer les nouveaux CPU et RAM."
+		}
 	} else if cpuOrRamChanged {
-		resp["message"] = "Ressources mises à jour. La VM était arrêtée ; les nouveaux CPU/RAM seront appliqués au prochain démarrage."
+		if ramChanged {
+			resp["message"] = "Ressources mises à jour. La VM était arrêtée ; les nouveaux CPU/RAM (et la RAM Minecraft) seront appliqués au prochain démarrage."
+		} else {
+			resp["message"] = "Ressources mises à jour. La VM était arrêtée ; les nouveaux CPU/RAM seront appliqués au prochain démarrage."
+		}
 	} else {
 		resp["message"] = "Ressources mises à jour."
 	}
