@@ -366,6 +366,13 @@ export const ServerDashboardPage: React.FC = () => {
       ? `Hôte: ${server.ip}\nPort: 22\nUtilisateur: ${server.sftp_user}\nMot de passe: ${server.sftp_password}`
       : "";
 
+  const winscpUrl =
+    server.sftp_user && server.sftp_password && server.ip
+      ? `winscp://${encodeURIComponent(server.sftp_user)}:${encodeURIComponent(
+          server.sftp_password,
+        )}@${server.ip}:22/`
+      : "";
+
   const statusLabel =
     serviceStatus === "active" ? "En marche" :
     serviceStatus === "inactive" ? "Arrêté" : String(serviceStatus);
@@ -1067,6 +1074,18 @@ export const ServerDashboardPage: React.FC = () => {
                 >
                   Copier toutes les infos d'accès SFTP
                 </button>
+                {winscpUrl && (
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    style={{ marginTop: "0.75rem" }}
+                    onClick={() => {
+                      window.location.href = winscpUrl;
+                    }}
+                  >
+                    Ouvrir directement dans WinSCP
+                  </button>
+                )}
                 <hr className="server-files-divider" />
                 <ServerFileBrowser serverId={serverId} />
               </>
