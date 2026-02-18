@@ -62,10 +62,10 @@ func New(ctx context.Context, dbPath string) (*Server, error) {
 		r.Post("/login", s.handleLogin)
 		r.Post("/register", s.handleRegister)
 		r.Post("/logout", s.handleLogout)
-		r.Get("/me", s.withAuth(s.handleMe))
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.AuthMiddleware)
+			r.Get("/me", s.withAuth(s.handleMe))
 			r.Get("/minecraft/versions", s.handleMinecraftVersions)
 			r.Get("/servers", s.handleListServers)
 
