@@ -29,6 +29,11 @@ func main() {
 
 	ctx := context.Background()
 
+	// Exécuter les migrations (ajout colonne role, etc.) si nécessaire
+	if err := database.Migrate(ctx); err != nil {
+		log.Fatalf("Erreur migrations: %v", err)
+	}
+
 	if *listUsers {
 		users, err := auth.ListUsers(ctx, database)
 		if err != nil {
