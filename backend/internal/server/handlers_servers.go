@@ -52,7 +52,7 @@ func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if u.Role == auth.RoleUser {
 		rows, err = s.DB.Sql().QueryContext(r.Context(), `
-			SELECT id, request_json, result_json, vmid, ip_address, created_at
+			SELECT id, request_json, result_json, vmid, ip_address, assigned_to_user_id, created_at
 			FROM deployments
 			WHERE game = ? AND status = ? AND assigned_to_user_id = ?
 			ORDER BY created_at DESC
@@ -60,7 +60,7 @@ func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 		`, "minecraft", string(deploy.StatusSuccess), u.ID)
 	} else {
 		rows, err = s.DB.Sql().QueryContext(r.Context(), `
-			SELECT id, request_json, result_json, vmid, ip_address, created_at
+			SELECT id, request_json, result_json, vmid, ip_address, assigned_to_user_id, created_at
 			FROM deployments
 			WHERE game = ? AND status = ?
 			ORDER BY created_at DESC
@@ -79,6 +79,7 @@ func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 		IP        string  `json:"ip"`
 		Port      int     `json:"port"`
 		VMID      *int64  `json:"vmid,omitempty"`
+		AssignedToUserID *int64 `json:"assigned_to_user_id,omitempty"`
 		CreatedAt string  `json:"created_at"`
 	}
 	var list []serverItem
@@ -88,8 +89,9 @@ func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 		var resultJSON sql.NullString
 		var vmid sql.NullInt64
 		var ip sql.NullString
+		var assignedTo sql.NullInt64
 		var createdAt time.Time
-		if err := rows.Scan(&id, &reqJSON, &resultJSON, &vmid, &ip, &createdAt); err != nil {
+		if err := rows.Scan(&id, &reqJSON, &resultJSON, &vmid, &ip, &assignedTo, &createdAt); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -100,6 +102,10 @@ func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 		}
 		if ip.Valid {
 			item.IP = ip.String
+		}
+		if assignedTo.Valid {
+			v := assignedTo.Int64
+			item.AssignedToUserID = &v
 		}
 		var req deploy.MinecraftDeploymentRequest
 		if err := json.Unmarshal([]byte(reqJSON), &req); err == nil {
