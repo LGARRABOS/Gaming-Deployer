@@ -1,73 +1,73 @@
 # 🕹 Proxmox Game Deployer
 
-Déploiement automatisé de serveurs de jeux (Minecraft) sur Proxmox, avec backend Go, frontend React et provisioning Ansible.
+Automated deployment of Minecraft servers on Proxmox, with a Go backend, React frontend, and Ansible provisioning.
 
 ---
 
-## ✨ Vue d’ensemble
+## ✨ Overview
 
-- **Cible** : cluster Proxmox VE avec template Ubuntu cloud‑init.
-- **Jeu supporté** : Minecraft Java (vanilla, Forge, NeoForge, Fabric, modpacks).
-- **Rôles** :
-  - **Propriétaire** : configuration Proxmox, création/suppression d’utilisateurs, déploiements complets.
-  - **Admin** : gestion des déploiements et des serveurs, consultation des utilisateurs et assignation de serveurs.
-  - **Utilisateur** : accès uniquement aux serveurs qui lui sont attribués.
-- **Stack** :
-  - Go + SQLite pour l’API et l’orchestrateur.
-  - React + Vite + TypeScript pour le dashboard.
-  - Ansible pour provisionner la VM Minecraft.
+- **Target**: Proxmox VE cluster with an Ubuntu cloud‑init template.
+- **Supported game**: Minecraft Java (vanilla, Forge, NeoForge, Fabric, modpacks).
+- **Roles**:
+  - **Owner**: Proxmox configuration, user creation/deletion, full deployment rights.
+  - **Admin**: manages deployments and servers, can view users and assign servers.
+  - **User**: can only access servers assigned to their account.
+- **Stack**:
+  - Go + SQLite for the API and orchestration.
+  - React + Vite + TypeScript for the dashboard.
+  - Ansible to provision the Minecraft VM.
 
 ---
 
-## 🚀 Démarrage rapide
+## 🚀 Quick start
 
-### 1. Prérequis
+### 1. Requirements
 
-- Un cluster **Proxmox VE** fonctionnel.
-- Une VM Ubuntu qui hébergera **Proxmox Game Deployer**.
-- Un template **Ubuntu cloud‑init** sur Proxmox (utilisé comme base pour chaque serveur Minecraft).
+- A working **Proxmox VE** cluster.
+- An Ubuntu VM that will host **Proxmox Game Deployer**.
+- An **Ubuntu cloud‑init template** in Proxmox (used as the base for each Minecraft server).
 
-### 2. Installation rapide sur la VM Ubuntu
+### 2. Fast install on the Ubuntu VM
 
 ```bash
 sudo mkdir -p /opt/proxmox-game-deployer
 sudo chown "$USER" /opt/proxmox-game-deployer
-git clone <URL_DU_REPO> /opt/proxmox-game-deployer
+git clone <REPOSITORY_URL> /opt/proxmox-game-deployer
 cd /opt/proxmox-game-deployer
 
-# Installation automatique (binaire + service + pgdctl)
+# One-shot install (binary + systemd services + pgdctl)
 sudo ./deploy/install.sh
 ```
 
-Puis vérifie que tout est en place :
+Then check that everything is running:
 
 ```bash
 pgdctl status
 ```
 
-### 3. Accès au dashboard
+### 3. Accessing the dashboard
 
-- Ouvre `https://<ton-domaine-ou-ip>` (ou `http://<IP_VM>:5298` si accès direct).
-- Au premier lancement, un **assistant de configuration** te guide pour :
-  - configurer l’accès Proxmox (URL, token, node, storage, bridge, template),
-  - configurer l’accès SSH vers les VMs,
-  - créer le compte **propriétaire**.
+- Open `https://<your-domain>` (or `http://<APP_VM_IP>:5298` if you expose the port directly).
+- On first run, a **setup wizard** will guide you through:
+  - configuring Proxmox access (URL, token, node, storage, bridge, template),
+  - configuring SSH access to the game VMs,
+  - creating the **owner** account.
 
-La configuration détaillée (variables, problèmes classiques, etc.) est décrite dans `docs/INSTALLATION.md`.
-
----
-
-## 🧩 Fonctionnalités principales
-
-- Création de serveurs Minecraft complets (VM + Java + service systemd).
-- Formulaire de déploiement avancé (CPU/RAM/disk, IP fixe, port, type/version Minecraft, modpacks).
-- Gestion des rôles (owner / admin / user) et assignation de serveurs aux utilisateurs.
-- Monitoring basique (CPU/RAM/Disk) et console distante.
-- Auto‑update via `pgdctl update` (pull Git + build + restart du service).
+More detailed configuration (env vars, typical issues, troubleshooting) lives in `docs/INSTALLATION.md`.
 
 ---
 
-## 🛠 Développement local
+## 🧩 Main features
+
+- Full Minecraft server provisioning (VM + Java + systemd service).
+- Advanced deployment form (CPU/RAM/disk, static IP, port, Minecraft type/version, modpacks).
+- Role-based access (owner / admin / user) and server assignment to users.
+- Basic monitoring (CPU/RAM/disk) and remote console.
+- Auto‑update via `pgdctl update` (Git pull + build + service restart).
+
+---
+
+## 🛠 Local development
 
 ```bash
 # Backend
@@ -80,39 +80,39 @@ npm install
 npm run dev
 ```
 
-- Backend : écoute par défaut sur `:5298`.
-- Frontend : `http://localhost:5173` avec proxy `/api` vers le backend.
+- Backend: listens on `:5298` by default.
+- Frontend: `http://localhost:5173` with `/api` proxied to the backend.
 
 ---
 
-## 🔁 Mise à jour en production
+## 🔁 Production updates
 
-Sur ta machine de développement :
+On your development machine:
 
 ```bash
 git commit -am "feat/fix: ..."
 git push origin main
 ```
 
-Sur la VM Ubuntu qui héberge Proxmox Game Deployer :
+On the Ubuntu VM running Proxmox Game Deployer:
 
 ```bash
 pgdctl update
 ```
 
-Cette commande :
+This command:
 
-- met à jour le dépôt Git sur `main`,
-- rebuild le frontend + backend,
-- redémarre le service systemd de l’application.
+- updates the Git repository on `main`,
+- rebuilds frontend + backend,
+- restarts the application systemd service.
 
 ---
 
-## 📚 Documentation détaillée
+## 📚 Detailed documentation
 
-Pour une installation complète, la configuration avancée et la résolution des problèmes courants, consulte :
+For a complete installation guide, advanced configuration and troubleshooting, see:
 
 - `docs/INSTALLATION.md`
 
-Ce README reste volontairement court pour te donner la **vue d’ensemble** et les **commandes essentielles**.
+This README stays short on purpose: it gives you the **big picture** and the **core commands** only.
 

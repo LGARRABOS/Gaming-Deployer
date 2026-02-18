@@ -1,52 +1,52 @@
-# Architecture fonctionnelle et technique
+# Architecture overview
 
-## Vue d'ensemble
+## Functional overview
 
-L'application **Proxmox Game Deployer** permet de :
+The **Proxmox Game Deployer** application allows you to:
 
-- Configurer la connexion à un cluster Proxmox (wizard initial).
-- Créer des jobs de déploiement de serveurs de jeux (Minecraft en premier).
-- Orchestrer la création de VMs, la configuration réseau (cloud-init), puis le provisioning du jeu via Ansible.
-- Suivre l'état des déploiements et afficher les logs en temps réel dans l'UI.
+- Configure connection to a Proxmox cluster (initial setup wizard).
+- Create game deployment jobs (Minecraft first).
+- Orchestrate VM creation, cloud‑init network configuration, then game provisioning through Ansible.
+- Track deployment status and show real‑time logs in the UI.
 
-## Pipeline de déploiement Minecraft
+## Minecraft deployment pipeline
 
 ```text
-UI (React) -> API Go (/api/deployments)
-           -> Enqueue job (SQLite.jobs, SQLite.deployments)
-           -> Worker Go (goroutine) :
-               1) Client Proxmox (HTTP, token)
+UI (React) -> Go API (/api/deployments)
+           -> enqueue job (SQLite.jobs, SQLite.deployments)
+           -> Go worker (goroutine):
+               1) Proxmox client (HTTP, API token)
                   - NextID
-                  - Clone VM depuis template cloud-init
-                  - Config CPU/RAM/Disk/Network + ipconfig0
-                  - Start VM + wait task
-               2) Wait SSH (TCP 22 sur IP fixe)
-               3) Provision Ansible (ansible-playbook provision_minecraft.yml)
+                  - Clone VM from cloud‑init template
+                  - Configure CPU/RAM/disk/network + ipconfig0
+                  - Start VM + wait for task
+               2) Wait for SSH (TCP 22 on fixed IP)
+               3) Run Ansible (ansible-playbook provision_minecraft.yml)
                   - Install Java
-                  - Créer user minecraft
-                  - Télécharger jar serveur
-                  - server.properties
-                  - UFW ports
-                  - Service systemd minecraft
-               4) Mise à jour statut + result_json
-               5) Logs append-only (deployment_logs)
+                  - Create minecraft user
+                  - Download server jar
+                  - Write server.properties
+                  - Open UFW ports
+                  - Create and enable systemd service `minecraft`
+               4) Update status + result_json
+               5) Append-only logs (deployment_logs)
 ```
 
-## Modèle de données (SQLite)
+## Data model (SQLite)
 
-- `settings` : configuration globale (Proxmox, etc), éventuellement chiffrée via `APP_ENC_KEY`.
-- `users` : comptes admins (actuellement un seul suffit).
-- `sessions` : sessions HTTP (cookie `session_id`).
-- `deployments` : métadonnées des déploiements (type de jeu, JSON d'inputs/outputs, vmid, IP, statuts).
-- `deployment_logs` : logs append-only.
-- `jobs` : file interne des jobs asynchrones.
+- `settings`: global configuration (Proxmox, flags, etc.), optionally encrypted via `APP_ENC_KEY`.
+- `users`: admin / owner / user accounts.
+- `sessions`: HTTP sessions (cookie `session_id`).
+- `deployments`: deployment metadata (game type, input/output JSON, VMID, IP, status).
+- `deployment_logs`: append‑only log entries per deployment.
+- `jobs`: internal queue of asynchronous jobs.
 
-## Extensibilité multi-jeux
+## Extensibility to multiple games
 
-- Le package `internal/minecraft` définit une structure `Config` et une conversion en `map[string]any` pour Ansible.
-- Pour ajouter un jeu :
-  - Créer un package `internal/<jeu>` avec une struct de config similaire.
-  - Créer un endpoint frontend + backend de création de déploiement.
-  - Ajouter un handler de job dédié dans `internal/deploy`.
-  - Créer un playbook Ansible spécialisé.
+- The `internal/minecraft` package defines a `Config` structure and a conversion to `map[string]any` for Ansible variables.
+- To add a new game:
+  - Create `internal/<game>` with a similar config struct.
+  - Add frontend + backend endpoints to create deployments for that game.
+  - Add a dedicated job handler in `internal/deploy`.
+  - Create a dedicated Ansible playbook.
 

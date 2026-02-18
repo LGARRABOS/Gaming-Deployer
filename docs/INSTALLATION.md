@@ -1,77 +1,77 @@
-## 📦 Installation & configuration détaillées
+## 📦 Detailed installation & configuration
 
-Ce document complète le `README.md` avec une procédure d’installation pas‑à‑pas et une FAQ des problèmes courants.
-
----
-
-## 1. Architecture de déploiement
-
-- **VM “App”** : héberge Proxmox Game Deployer (backend + frontend + SQLite + Ansible).
-- **Cluster Proxmox** : héberge les VMs Minecraft créées à partir d’un **template Ubuntu cloud‑init**.
-- **Flux principal** :
-  1. L’UI crée un *déploiement* Minecraft.
-  2. Le backend crée un job et appelle Proxmox (clone du template, config CPU/RAM/disk/network).
-  3. Après démarrage de la VM, Ansible installe Java + Minecraft + service systemd.
-  4. Le dashboard suit l’état du déploiement et du serveur (logs, monitoring).
+This document complements `README.md` with a step‑by‑step installation guide and a FAQ of common issues.
 
 ---
 
-## 2. Préparation côté Proxmox
+## 1. Deployment architecture
 
-### 2.1 Créer un token API dédié
+- **“App” VM**: runs Proxmox Game Deployer (backend + frontend + SQLite + Ansible).
+- **Proxmox cluster**: hosts Minecraft VMs created from an **Ubuntu cloud‑init template**.
+- **Main flow**:
+  1. The UI creates a Minecraft *deployment*.
+  2. The backend enqueues a job and calls Proxmox (clone template, configure CPU/RAM/disk/network).
+  3. After the VM boots, Ansible installs Java + Minecraft + a systemd service.
+  4. The dashboard tracks deployment and server state (logs, monitoring).
 
-1. Dans l’interface Proxmox : **Datacenter → Permissions → API Tokens**.
-2. Crée un token sur un utilisateur (souvent `root@pam`) :
-   - Token ID : `root@pam!game-deployer`
-   - Autorisations : suffisant de donner les droits sur **le node** et **le storage** utilisés.
-3. Garde précieusement :
+---
+
+## 2. Preparing Proxmox
+
+### 2.1 Create a dedicated API token
+
+1. In the Proxmox UI go to **Datacenter → Permissions → API Tokens**.
+2. Create a token on a user (often `root@pam`):
+   - Token ID: `root@pam!game-deployer`
+   - Permissions: enough rights on the **node** and **storage** you plan to use.
+3. Keep these safe:
    - **Token ID**
    - **Token Secret**
 
-### 2.2 Créer un template Ubuntu cloud‑init
+### 2.2 Create an Ubuntu cloud‑init template
 
-1. Télécharge une image cloud‑init (Ubuntu Server) et crée une VM template classique.
-2. Active cloud‑init, configure :
-   - utilisateur par défaut (ex. `ubuntu`),
-   - disque principal sur le storage souhaité (ex. `local-lvm`),
-   - réseau bridge (ex. `vmbr0`).
-3. Convertis la VM en **template** et note son **VMID** (ex. `9000`).
+1. Download an Ubuntu Server cloud‑init image and create a classic VM/template.
+2. Enable cloud‑init and configure:
+   - default user (e.g. `ubuntu`),
+   - main disk on the chosen storage (e.g. `local-lvm`),
+   - network bridge (e.g. `vmbr0`).
+3. Convert the VM to a **template** and note its **VMID** (e.g. `9000`).
 
-Ce template sera cloné pour chaque serveur Minecraft.
+This template will be cloned for every Minecraft server.
 
 ---
 
-## 3. Déploiement de l’application sur la VM Ubuntu
+## 3. Deploying the app on the Ubuntu VM
 
-### 3.1 Prérequis OS
+### 3.1 OS prerequisites
 
-Sur la VM qui va héberger l’app :
+On the VM that will host the app:
 
 ```bash
 sudo apt update
 sudo apt install -y git golang nodejs npm ansible
 ```
 
-### 3.2 Clonage & installation
+### 3.2 Clone & install
 
 ```bash
 sudo mkdir -p /opt/proxmox-game-deployer
 sudo chown "$USER" /opt/proxmox-game-deployer
-git clone https://github.com/<ton-user>/<ton-repo>.git /opt/proxmox-game-deployer
+git clone https://github.com/<your-user>/<your-repo>.git /opt/proxmox-game-deployer
 cd /opt/proxmox-game-deployer
 
-# Installation automatique : binaire, services systemd, CLI pgdctl
+# One-shot install: binary, systemd services, pgdctl CLI
 sudo ./deploy/install.sh
 ```
 
-Ce script :
+This script:
 
-- installe le binaire backend + frontend buildé,
-- crée/active `game-deployer.service` (serveur HTTP),
-- crée/active `game-deployer-update.service` + `game-deployer-update.timer`,
-- installe `pgdctl` dans `/usr/local/bin`.
+- installs the built backend+frontend binary,
+- creates/enables `game-deployer.service` (HTTP server),
+- creates/enables `game-deployer-update.service` + `game-deployer-update.timer`,
+- installs `pgdctl` into `/usr/local/bin`.
 
-Vérifie :
+Verify:
 
 ```bash
 pgdctl status
@@ -80,46 +80,46 @@ sudo systemctl status game-deployer
 
 ---
 
-## 4. Assistant de configuration (setup)
+## 4. Setup wizard
 
-Accède à l’application :
+Access the application:
 
-- soit via ton proxy (ex. `https://gamingcontrol.useless.ovh`),
-- soit directement : `http://<IP_VM_APP>:5298`.
+- either through your proxy (e.g. `https://gamingcontrol.useless.ovh`),
+- or directly: `http://<APP_VM_IP>:5298`.
 
-Si aucune config n’est en DB, tu es redirigé vers `/setup` :
+If no config exists in the DB you’ll be redirected to `/setup`:
 
-1. **Config Proxmox**
-   - API URL : `https://pve.example.com:8006`
-   - Token ID : `root@pam!game-deployer`
-   - Token Secret : valeur secrète du token.
-   - Node par défaut : ex. `pve`.
-   - Storage par défaut : ex. `local-lvm`.
-   - Bridge par défaut : ex. `vmbr0`.
-   - Template VMID : ex. `9000` (template cloud‑init).
-2. **Config SSH**
-   - Utilisateur SSH : ex. `ubuntu` (celui du template cloud‑init).
-   - Clé publique SSH : clé utilisée par l’app pour se connecter aux VMs.
-3. **Test Proxmox**
-   - bouton “Tester la connexion” → doit valider l’API et le token.
-4. **Création du propriétaire**
-   - login + mot de passe (ce compte aura le rôle `owner`).
+1. **Proxmox config**
+   - API URL: `https://pve.example.com:8006`
+   - Token ID: `root@pam!game-deployer`
+   - Token Secret: the token’s secret value.
+   - Default node: e.g. `pve`.
+   - Default storage: e.g. `local-lvm`.
+   - Default bridge: e.g. `vmbr0`.
+   - Template VMID: e.g. `9000` (cloud‑init template).
+2. **SSH config**
+   - SSH user: e.g. `ubuntu` (from the template).
+   - Public SSH key: key used by the app to connect to game VMs.
+3. **Proxmox test**
+   - click “Test connection” → must validate API URL and token.
+4. **Owner creation**
+   - choose login + password (this account gets the `owner` role).
 
-Après validation, tu es redirigé vers `/login`.
+After validation you are redirected to `/login`.
 
 ---
 
-## 5. Réseau et reverse proxy
+## 5. Network and reverse proxy
 
-### 5.1 Recommandations générales
+### 5.1 General recommendations
 
-- Mettre l’app derrière un **reverse proxy** (Nginx / Nginx Proxy Manager / Traefik…).
-- Toujours utiliser **HTTPS** côté public (Let’s Encrypt).
-- Configurer le proxy pour :
-  - transmettre `X-Forwarded-Proto: https`,
-  - passer les en‑têtes `Host`, `X-Real-IP`, `X-Forwarded-For`.
+- Place the app behind a **reverse proxy** (Nginx / Nginx Proxy Manager / Traefik…).
+- Expose it as **HTTPS** to the outside (Let’s Encrypt).
+- Configure the proxy to:
+  - forward `X-Forwarded-Proto: https`,
+  - pass `Host`, `X-Real-IP`, `X-Forwarded-For`.
 
-### 5.2 Exemple Nginx (classique)
+### 5.2 Nginx example
 
 ```nginx
 server {
@@ -132,7 +132,7 @@ server {
   listen 443 ssl http2;
   server_name gamingcontrol.useless.ovh;
 
-  # Certificats Let’s Encrypt …
+  # Let's Encrypt certificates here…
 
   location / {
     proxy_pass http://192.168.x.x:5298;
@@ -144,28 +144,28 @@ server {
 }
 ```
 
-Grâce à `X-Forwarded-Proto: https`, l’app marque les cookies de session en `Secure` automatiquement.
+With `X-Forwarded-Proto: https` the app automatically marks the session cookie as `Secure`.
 
 ---
 
-## 6. Flux de déploiement Minecraft
+## 6. Minecraft deployment flow
 
-1. Dans l’UI : `Déploiements → Nouveau serveur Minecraft`.
-2. Remplis :
-   - Nom, CPU, RAM, disque,
-   - IP fixe (optionnel), ports,
+1. In the UI: `Deployments → New Minecraft server`.
+2. Fill in:
+   - name, CPU, RAM, disk,
+   - optional static IP and ports,
    - type/version (vanilla, Fabric, Forge, etc.),
-   - options avancées (EULA, joueurs max, online‑mode, JVM, whitelist, opérateurs…).
-3. Soumets le formulaire.
-4. Le déploiement apparaît dans la liste avec un statut :
-   - `queued` → `running` → `success` ou `failed`.
-5. Clique sur un déploiement pour voir :
-   - les logs détaillés (Proxmox + Ansible),
-   - les erreurs éventuelles.
+   - advanced options (EULA, max players, online‑mode, JVM, whitelist, operators…).
+3. Submit the form.
+4. The deployment appears in the list with status:
+   - `queued` → `running` → `success` or `failed`.
+5. Click a deployment to see:
+   - detailed logs (Proxmox + Ansible),
+   - any error messages.
 
-Une fois `success`, le serveur apparaît dans **Serveurs Minecraft** :
+Once `success`, the server appears under **Minecraft Servers**:
 
-- accès à la console,
+- console access,
 - start/stop/restart,
 - monitoring (CPU/RAM/disk),
 - backups,
@@ -173,133 +173,134 @@ Une fois `success`, le serveur apparaît dans **Serveurs Minecraft** :
 
 ---
 
-## 7. Gestion des utilisateurs & rôles
+## 7. Users and roles
 
-- **Propriétaire (`owner`)**
-  - Accès à tout.
-  - Peut créer/supprimer des utilisateurs.
-  - Peut promouvoir/dégrader `admin` ↔ `user`.
-  - Peut assigner des serveurs à des utilisateurs.
+- **Owner (`owner`)**
+  - Full access.
+  - Can create/delete users.
+  - Can promote/demote `admin` ↔ `user`.
+  - Can assign servers to users.
 - **Admin (`admin`)**
-  - Accès aux déploiements et serveurs.
-  - Voit la page **Utilisateurs** mais ne peut pas modifier les rôles ni supprimer un compte.
-  - Peut associer des serveurs à des utilisateurs (assignation).
-- **Utilisateur (`user`)**
-  - Ne voit que l’onglet **Serveurs Minecraft**.
-  - Ne voit que les serveurs qui lui sont assignés.
+  - Access to deployments and servers.
+  - Can see the **Users** page but cannot change roles or delete users.
+  - Can assign servers to users.
+- **User (`user`)**
+  - Only sees the **Minecraft Servers** section.
+  - Only sees servers assigned to them.
 
-Quand tu supprimes un utilisateur :
+When you delete a user:
 
-- ses sessions sont invalidées,
-- les serveurs qui lui étaient assignés sont désassignés (plus de verrou).
+- their sessions are invalidated,
+- servers assigned to them are unassigned.
 
 ---
 
-## 8. FAQ / Problèmes courants
+## 8. FAQ / Common problems
 
-### 8.1 Connexion impossible / retour permanent sur la page de login
+### 8.1 Login works but you always end up on the login page
 
-**Symptômes**
+**Symptoms**
 
-- `POST /api/login` renvoie 200,
-- mais `GET /api/me` renvoie 401,
-- le menu reste celui d’un utilisateur non connecté.
+- `POST /api/login` returns 200,
+- but `GET /api/me` returns 401,
+- the menu stays as if you were not logged in.
 
-**Causes probables**
+**Likely causes**
 
-- Cookie de session non envoyé (proxy ne transmet pas les en‑têtes, pas de `X-Forwarded-Proto`).
-- Ancienne version du backend (route `/api/me` non protégée par le middleware d’auth).
+- Session cookie not sent (proxy strips headers or doesn’t send `X-Forwarded-Proto`).
+- Old backend version (route `/api/me` not behind auth middleware).
 
-**À vérifier**
+**What to check**
 
-- Dans les DevTools navigateur (Onglet Réseau) :
-  - `POST /api/login` → réponse contient bien `Set-Cookie: session_id=...; Secure; SameSite=Lax`.
-  - `GET /api/me` → statut **200** avec `{"username":"...","role":"..."}`.
-- Côté proxy :
-  - ajouter `proxy_set_header X-Forwarded-Proto https;`.
+- In browser DevTools (Network tab):
+  - `POST /api/login` → response contains `Set-Cookie: session_id=...; Secure; SameSite=Lax`.
+  - `GET /api/me` → status **200** with `{"username":"...","role":"..."}`.
+- On the proxy:
+  - add `proxy_set_header X-Forwarded-Proto https;`.
 
-### 8.2 L’owner ne voit pas le bon menu / les liens d’admin
+### 8.2 Owner does not see owner/admin menu entries
 
-**Vérifie** la réponse de :
+**Check**:
 
-- `GET /api/me` après login : doit contenir `role: "owner"`.
-- Regarde aussi que le backend utilise bien la bonne base SQLite (log au démarrage : `database: /opt/proxmox-game-deployer/data/app.db`).
+- `GET /api/me` after login must contain `role: "owner"`.
+- Backend startup log must show the right SQLite DB path:
+  `database: /opt/proxmox-game-deployer/data/app.db`.
 
-Si l’owner est dans une autre base (ex. `/backend/data/app.db`), mets à jour cette base ou configure correctement `APP_DB_PATH`.
+If the owner user is stored in another DB (e.g. `/backend/data/app.db`), migrate that DB or fix `APP_DB_PATH`.
 
-### 8.3 Redimensionnement de la RAM VM vs RAM Minecraft
+### 8.3 VM RAM resize vs Minecraft RAM
 
-**Règle appliquée par l’app** :
+**Rule used by the app**:
 
-- **RAM JVM Minecraft = RAM VM – 1 Go**, avec un minimum de 1 Go.
+- **Minecraft JVM heap = VM RAM – 1 GiB**, with a minimum of 1 GiB.
 
-Quand tu modifies la RAM de la VM dans l’onglet **Specs** :
+When you change VM RAM in the **Specs** tab:
 
-- la config Proxmox est mise à jour,
-- la VM est redémarrée si nécessaire,
-- la heap Java (`-Xmx`) est recalculée et appliquée :
+- Proxmox config is updated,
+- the VM is restarted if required,
+- the Java heap (`-Xmx`) is recalculated and applied:
   - via `user_jvm_args.txt` (Forge / NeoForge),
-  - ou via le service systemd (vanilla / Fabric / certains modpacks).
+  - or via the systemd unit (vanilla / Fabric / some modpacks).
 
-### 8.4 Un simple utilisateur voit un lien pour créer un serveur
+### 8.4 Regular user sees a link to create a server
 
-C’est corrigé : pour les comptes `user` :
+For `user` accounts:
 
-- la page **Serveurs Minecraft** affiche uniquement un message expliquant qu’aucun serveur ne lui est encore associé,
-- aucun lien vers “Nouveau déploiement” n’est proposé.
+- the **Minecraft Servers** page only shows an info message when no servers are assigned,
+- there is no “New deployment” link.
 
-### 8.5 Problèmes de certificats TLS Proxmox
+### 8.5 TLS certificate issues with Proxmox
 
-Si Proxmox utilise un certificat auto‑signé :
+If Proxmox uses a self‑signed certificate:
 
-- dans `.env` de l’application, tu peux activer :
+- in the app `.env`, you can enable:
 
 ```bash
 APP_PROXMOX_INSECURE_TLS=true
 ```
 
-À utiliser uniquement sur un LAN de confiance.
+Use this only on a trusted LAN.
 
 ---
 
-## 9. Mise à jour et rollback
+## 9. Updates and rollback
 
-### 9.1 Mise à jour standard
+### 9.1 Standard update
 
-Sur ta machine de développement :
+On your development machine:
 
 ```bash
 git commit -am "feat: ..."
 git push origin main
 ```
 
-Sur la VM Ubuntu :
+On the Ubuntu VM:
 
 ```bash
 pgdctl update
 ```
 
-### 9.2 Rollback rapide
+### 9.2 Quick rollback
 
-En cas de problème après une mise à jour :
+If something breaks after an update:
 
 ```bash
 cd /opt/proxmox-game-deployer
 git log --oneline
-git checkout <commit_précédent>
+git checkout <previous_commit>
 sudo systemctl restart game-deployer
 ```
 
-(Pense ensuite à corriger / rebaser pour revenir proprement sur `main`.)
+(Then later fix the issue and rebase/merge back onto `main`.)
 
 ---
 
 ## 10. Support & contributions
 
-- Issues / idées : ouvre une issue sur le dépôt GitHub.
-- PR bienvenues pour :
-  - nouveaux jeux,
-  - améliorations UI,
-  - intégration de monitoring avancé,
-  - optimisation du provisioning.
+- Use GitHub issues for bugs and feature ideas.
+- Pull requests are welcome for:
+  - new games,
+  - UI/UX improvements,
+  - advanced monitoring integrations,
+  - provisioning optimizations.
 
