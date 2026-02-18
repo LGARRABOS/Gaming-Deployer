@@ -2,11 +2,17 @@ export interface ApiError {
   message: string;
 }
 
+function isPublicPath(): boolean {
+  if (typeof window === "undefined") return false;
+  const p = window.location.pathname;
+  return p === "/" || p === "/register" || p.startsWith("/setup");
+}
+
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    // Redirection douce vers /login en cas de 401.
+    // Redirection vers /login en cas de 401, sauf sur page d'accueil et inscription
     if (res.status === 401) {
-      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login") && !isPublicPath()) {
         window.location.href = "/login";
       }
     }

@@ -2,7 +2,9 @@ import React from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { SetupWizard } from "./pages/SetupWizard";
+import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
+import { RegisterPage } from "./pages/RegisterPage";
 import { CreateMinecraftServerPage } from "./pages/CreateMinecraftServerPage";
 import { DeploymentsListPage } from "./pages/DeploymentsListPage";
 import { DeploymentDetailsPage } from "./pages/DeploymentDetailsPage";
@@ -24,13 +26,15 @@ const AppRoutes: React.FC = () => {
     );
   }
 
-  // Force wizard if not initialized.
+  // Force wizard if not initialized (sauf page d'accueil pour afficher un message)
   if (!initialized && !location.pathname.startsWith("/setup")) {
     return <Navigate to="/setup" replace />;
   }
 
   return (
     <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/register" element={<RegisterPage />} />
       <Route
         path="/setup"
         element={
@@ -100,14 +104,6 @@ const AppRoutes: React.FC = () => {
         element={
           <Layout>
             <ServersListPage />
-          </Layout>
-        }
-      />
-      <Route
-        path="/"
-        element={
-          <Layout>
-            <DeploymentsListPage />
           </Layout>
         }
       />

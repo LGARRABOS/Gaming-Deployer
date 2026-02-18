@@ -3,12 +3,19 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/example/proxmox-game-deployer/internal/auth"
+	"github.com/example/proxmox-game-deployer/internal/config"
 )
 
 type loginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type registerRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
@@ -62,5 +69,35 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 // handleMe returns info about current user (including role).
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request, u *auth.User) {
 	writeJSON(w, http.StatusOK, meResponse{Username: u.Username, Role: u.Role})
+}
+
+// handleRegister allows anyone to create a new account (role "user"). Only available once the app is initialized.
+func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	initialized, err := config.IsInitialized(ctx, s.DB)
+	if err != nil || !initialized {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "Application non initialisée"})
+		return
+	}
+	var req registerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	username := strings.TrimSpace(req.Username)
+	if username == "" || len(req.Password) < 6 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "Nom d'utilisateur requis et mot de passe d'au moins 6 caractères"})
+		return
+	}
+	_, err = auth.CreateUser(ctx, s.DB, username, req.Password, auth.RoleUser)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "unique") {
+			writeJSON(w, http.StatusConflict, map[string]any{"error": "Ce nom d'utilisateur est déjà pris"})
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "message": "Compte créé. Connectez-vous."})
 }
 

@@ -60,6 +60,7 @@ func New(ctx context.Context, dbPath string) (*Server, error) {
 		r.Post("/setup/test-proxmox", s.handleTestProxmox)
 		r.Post("/setup/initialize", s.handleInitialize)
 		r.Post("/login", s.handleLogin)
+		r.Post("/register", s.handleRegister)
 		r.Post("/logout", s.handleLogout)
 		r.Get("/me", s.withAuth(s.handleMe))
 
