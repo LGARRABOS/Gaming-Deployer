@@ -114,6 +114,52 @@ func (s *Server) handleUpdateUserRole(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, genericOKResponse{OK: true})
 }
 
+// handleDeleteUser supprime un utilisateur (owner uniquement).
+// - Impossible de supprimer un compte owner.
+// - Les sessions sont supprimées automatiquement (FK ON DELETE CASCADE).
+// - Les serveurs éventuellement associés à cet utilisateur sont désassignés.
+func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
+	u := s.mustUser(r)
+	if u == nil || u.Role != auth.RoleOwner {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	// Vérifier le rôle de l'utilisateur ciblé (interdire la suppression d'un owner).
+	var role string
+	if err := s.DB.Sql().QueryRowContext(r.Context(), `SELECT role FROM users WHERE id = ?`, id).Scan(&role); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "user not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if role == auth.RoleOwner {
+		http.Error(w, "cannot delete owner user", http.StatusBadRequest)
+		return
+	}
+
+	// Désassigner les déploiements de cet utilisateur.
+	if _, err := s.DB.Sql().ExecContext(r.Context(), `
+		UPDATE deployments SET assigned_to_user_id = NULL WHERE assigned_to_user_id = ?
+	`, id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// Supprimer l'utilisateur (les sessions sont supprimées par la contrainte FK ON DELETE CASCADE).
+	if _, err := s.DB.Sql().ExecContext(r.Context(), `DELETE FROM users WHERE id = ?`, id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, genericOKResponse{OK: true})
+}
+
 // mustUser returns the current user from context or nil (caller must check).
 func (s *Server) mustUser(r *http.Request) *auth.User {
 	val := r.Context().Value(userContextKey)

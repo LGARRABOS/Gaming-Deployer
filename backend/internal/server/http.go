@@ -87,6 +87,7 @@ func New(ctx context.Context, dbPath string) (*Server, error) {
 				r.Use(s.requireOwner)
 				r.Post("/users", s.handleCreateUser)
 				r.Put("/users/{id}/role", s.handleUpdateUserRole)
+				r.Delete("/users/{id}", s.handleDeleteUser)
 			})
 			// Déploiements : créer, lister, détail, logs, supprimer, assigner (admin ou propriétaire)
 			r.Group(func(r chi.Router) {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { apiGet, apiPost } from "../api/client";
+import { apiGet, apiPost, apiDelete } from "../api/client";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 
 interface UserItem {
@@ -31,6 +31,7 @@ export const UsersPage: React.FC = () => {
   const [assignServerId, setAssignServerId] = useState<number | "">("");
   const [assigning, setAssigning] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -106,6 +107,25 @@ export const UsersPage: React.FC = () => {
       setAssignError((e as Error).message ?? "Erreur désassignation");
     } finally {
       setAssigning(false);
+    }
+  };
+
+  const deleteUser = async (userId: number) => {
+    if (!isOwner) return;
+    if (!window.confirm("Supprimer cet utilisateur ? Ses sessions seront fermées et ses serveurs désassignés.")) {
+      return;
+    }
+    setDeletingId(userId);
+    try {
+      await apiDelete(`/api/users/${userId}`);
+      if (selectedUserId === userId) {
+        setSelectedUserId(null);
+      }
+      load();
+    } catch (e: unknown) {
+      setError((e as Error).message ?? "Erreur suppression utilisateur");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -185,7 +205,7 @@ export const UsersPage: React.FC = () => {
                 <td>
                   {!isOwner && <span className="hint">Lecture seule</span>}
                   {isOwner && (
-                    <>
+                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                       {u.role === "owner" && <span className="hint">—</span>}
                       {u.role === "admin" && (
                         <button
@@ -207,7 +227,17 @@ export const UsersPage: React.FC = () => {
                           {updatingId === u.id ? "…" : "Promouvoir en admin"}
                         </button>
                       )}
-                    </>
+                      {u.role !== "owner" && (
+                        <button
+                          type="button"
+                          className="btn btn--danger btn--small"
+                          disabled={deletingId === u.id}
+                          onClick={() => deleteUser(u.id)}
+                        >
+                          {deletingId === u.id ? "Suppression…" : "Supprimer"}
+                        </button>
+                      )}
+                    </div>
                   )}
                 </td>
               </tr>
