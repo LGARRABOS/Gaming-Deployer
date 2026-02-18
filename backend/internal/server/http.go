@@ -170,15 +170,25 @@ func (s *Server) getSessionFromRequest(r *http.Request) (*auth.Session, error) {
 	return auth.GetSession(r.Context(), s.DB, c.Value)
 }
 
-// setSessionCookie writes the session cookie.
-func setSessionCookie(w http.ResponseWriter, sessionID string, expires time.Time) {
+// isSecureRequest returns true when the client used HTTPS (direct or via proxy).
+func isSecureRequest(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	return r.Header.Get("X-Forwarded-Proto") == "https"
+}
+
+// setSessionCookie writes the session cookie. Secure is set when the client used HTTPS
+// so the cookie is stored and sent by the browser (required behind HTTPS reverse proxy).
+func setSessionCookie(w http.ResponseWriter, r *http.Request, sessionID string, expires time.Time) {
+	secure := os.Getenv("APP_SECURE_COOKIE") == "true" || isSecureRequest(r)
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session_id",
 		Value:    sessionID,
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   os.Getenv("APP_SECURE_COOKIE") == "true",
+		Secure:   secure,
 		Expires:  expires,
 	})
 }

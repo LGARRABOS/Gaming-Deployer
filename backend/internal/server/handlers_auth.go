@@ -46,7 +46,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not create session", http.StatusInternalServerError)
 		return
 	}
-	setSessionCookie(w, sess.ID, sess.ExpiresAt)
+	setSessionCookie(w, r, sess.ID, sess.ExpiresAt)
 	writeJSON(w, http.StatusOK, meResponse{Username: u.Username, Role: u.Role})
 }
 
