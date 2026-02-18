@@ -1067,22 +1067,23 @@ export const ServerDashboardPage: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  className="btn-copy-all"
-                  onClick={() => copyToClipboard(sftpBlock, "Infos SFTP copiées")}
-                >
-                  Copier toutes les infos d'accès SFTP
-                </button>
-                {winscpUrl && (
-                  <a
-                    href={winscpUrl}
-                    className="btn btn--primary"
-                    style={{ marginTop: "0.75rem", display: "inline-block" }}
+                <div className="sftp-actions">
+                  <button
+                    type="button"
+                    className="btn btn--secondary"
+                    onClick={() => copyToClipboard(sftpBlock, "Infos SFTP copiées")}
                   >
-                    Ouvrir directement dans WinSCP
-                  </a>
-                )}
+                    Copier toutes les infos SFTP
+                  </button>
+                  {winscpUrl && (
+                    <a
+                      href={winscpUrl}
+                      className="btn btn--primary"
+                    >
+                      Ouvrir dans WinSCP
+                    </a>
+                  )}
+                </div>
                 <hr className="server-files-divider" />
                 <ServerFileBrowser serverId={serverId} />
               </>
