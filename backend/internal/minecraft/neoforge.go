@@ -22,7 +22,8 @@ type neoForgeMetadata struct {
 
 // ResolveNeoForgeInstallerURL returns the NeoForge installer JAR URL and full NeoForge
 // version for a given Minecraft version (e.g. "1.20.6" -> "20.6.XX").
-// It chooses the highest stable NeoForge patch version for that MC version.
+// It prefers the highest stable NeoForge patch; if none exists (e.g. 1.20.5 only has beta),
+// it falls back to the highest beta build (e.g. 20.5.0-beta).
 func ResolveNeoForgeInstallerURL(mcVersion string) (installerURL, fullVersion string, err error) {
 	mcVersion = strings.TrimSpace(mcVersion)
 	if mcVersion == "" {
@@ -51,13 +52,10 @@ func ResolveNeoForgeInstallerURL(mcVersion string) (installerURL, fullVersion st
 
 	bestVersion := ""
 	bestPatch := -1
+	// First pass: prefer stable versions (no hyphen).
 	for _, v := range meta.Versioning.Versions.Versions {
 		v = strings.TrimSpace(v)
-		if v == "" {
-			continue
-		}
-		// Skip pre-releases / betas for now.
-		if strings.Contains(v, "-") {
+		if v == "" || strings.Contains(v, "-") {
 			continue
 		}
 		if !strings.HasPrefix(v, prefix) {
@@ -71,6 +69,28 @@ func ResolveNeoForgeInstallerURL(mcVersion string) (installerURL, fullVersion st
 		if patch > bestPatch {
 			bestPatch = patch
 			bestVersion = v
+		}
+	}
+	// Fallback: if no stable build for this MC version, accept beta (e.g. 20.5.0-beta for 1.20.5).
+	if bestVersion == "" {
+		for _, v := range meta.Versioning.Versions.Versions {
+			v = strings.TrimSpace(v)
+			if v == "" || !strings.HasPrefix(v, prefix) {
+				continue
+			}
+			baseVer := v
+			if idx := strings.Index(v, "-"); idx > 0 {
+				baseVer = v[:idx]
+			}
+			patchPart := strings.TrimPrefix(baseVer, prefix)
+			patch, err := strconv.Atoi(patchPart)
+			if err != nil {
+				continue
+			}
+			if patch > bestPatch {
+				bestPatch = patch
+				bestVersion = v
+			}
 		}
 	}
 	if bestVersion == "" {
