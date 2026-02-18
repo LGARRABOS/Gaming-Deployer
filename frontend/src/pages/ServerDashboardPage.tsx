@@ -368,9 +368,9 @@ export const ServerDashboardPage: React.FC = () => {
 
   const winscpUrl =
     server.sftp_user && server.sftp_password && server.ip
-      ? `winscp://${encodeURIComponent(server.sftp_user)}:${encodeURIComponent(
+      ? `sftp://${encodeURIComponent(server.sftp_user)}:${encodeURIComponent(
           server.sftp_password,
-        )}@${server.ip}:22/`
+        )}@${server.ip}/`
       : "";
 
   const statusLabel =
@@ -1075,16 +1075,13 @@ export const ServerDashboardPage: React.FC = () => {
                   Copier toutes les infos d'accès SFTP
                 </button>
                 {winscpUrl && (
-                  <button
-                    type="button"
+                  <a
+                    href={winscpUrl}
                     className="btn btn--primary"
-                    style={{ marginTop: "0.75rem" }}
-                    onClick={() => {
-                      window.location.href = winscpUrl;
-                    }}
+                    style={{ marginTop: "0.75rem", display: "inline-block" }}
                   >
                     Ouvrir directement dans WinSCP
-                  </button>
+                  </a>
                 )}
                 <hr className="server-files-divider" />
                 <ServerFileBrowser serverId={serverId} />
