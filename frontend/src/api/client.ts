@@ -54,6 +54,12 @@ export async function apiDelete(path: string): Promise<void> {
   });
   if (!res.ok) {
     await handleResponse<unknown>(res);
+    return;
+  }
+  // Consommer le body pour 202/204 (évite problèmes de connexion)
+  const ct = res.headers.get("Content-Type") ?? "";
+  if (ct.includes("application/json") && res.body) {
+    await res.json();
   }
 }
 

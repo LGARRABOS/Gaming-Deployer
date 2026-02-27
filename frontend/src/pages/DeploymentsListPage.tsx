@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { apiGet } from "../api/client";
 
 interface DeploymentListItem {
@@ -25,6 +25,8 @@ interface DeploymentsListPageProps {
 }
 
 export const DeploymentsListPage: React.FC<DeploymentsListPageProps> = ({ game }) => {
+  const location = useLocation();
+  const deletedId = (location.state as { deletedId?: number } | null)?.deletedId;
   const [items, setItems] = useState<DeploymentListItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +37,11 @@ export const DeploymentsListPage: React.FC<DeploymentsListPageProps> = ({ game }
     apiGet<DeploymentListItem[] | null>(url)
       .then((data) => {
         if (!cancelled) {
-          setItems(Array.isArray(data) ? data : []);
+          let list = Array.isArray(data) ? data : [];
+          if (deletedId != null) {
+            list = list.filter((d) => d.id !== deletedId);
+          }
+          setItems(list);
         }
       })
       .catch((e: unknown) => {
@@ -45,7 +51,7 @@ export const DeploymentsListPage: React.FC<DeploymentsListPageProps> = ({ game }
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [game]);
+  }, [game, deletedId]);
 
   if (loading) {
     return (
