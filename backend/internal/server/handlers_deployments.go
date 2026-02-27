@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -53,9 +54,10 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.DB.Sql().QueryContext(r.Context(), `
 		SELECT id, game, type, status, vmid, ip_address, created_at, updated_at
 		FROM deployments
+		WHERE status != ?
 		ORDER BY created_at DESC
 		LIMIT 100
-	`)
+	`, string(deploy.StatusDeleting))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -227,10 +229,9 @@ func (s *Server) handleGetDeploymentLogs(w http.ResponseWriter, r *http.Request)
 // Helper to avoid unused import errors for auth in this file.
 var _ = auth.User{}
 
-// handleDeleteDeployment cancels a deployment and attempts to destroy its VM, then
-// marks the deployment as cancelled. Jobs associated with the deployment are
-// moved to "cancelled" as well. This is a best-effort operation: failures when
-// talking to Proxmox are reported but do not prevent local cancellation.
+// handleDeleteDeployment cancels a deployment and attempts to destroy its VM.
+// If a VM exists, deletion runs asynchronously (returns 202). Otherwise returns 204.
+// The deployment is always removed from the DB eventually, even if Proxmox fails.
 func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
@@ -261,41 +262,6 @@ func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Attempt to destroy the VM if we have a VMID.
-	vmDeletedOK := true
-
-	if vmid.Valid {
-		cfg, err := config.LoadProxmoxConfig(ctx, s.DB)
-		if err == nil {
-			cl, err := proxmox.NewClient(cfg.APIURL, cfg.APITokenID, cfg.APITokenSecret)
-			if err == nil {
-				var req deploy.MinecraftDeploymentRequest
-				if err := json.Unmarshal([]byte(reqJSON), &req); err == nil {
-					node := req.Node
-					if node == "" {
-						node = cfg.DefaultNode
-					}
-					// Try stopping, then deleting la VM. En cas d'erreur, on garde
-					// le déploiement visible et on remonte l'erreur à l'appelant.
-					if upid, err := cl.StopVM(ctx, node, int(vmid.Int64)); err == nil {
-						if err := cl.WaitForTask(ctx, node, upid, 5*time.Minute); err != nil {
-							vmDeletedOK = false
-						}
-					} else {
-						vmDeletedOK = false
-					}
-					if upid, err := cl.DeleteVM(ctx, node, int(vmid.Int64)); err == nil {
-						if err := cl.WaitForTask(ctx, node, upid, 10*time.Minute); err != nil {
-							vmDeletedOK = false
-						}
-					} else {
-						vmDeletedOK = false
-					}
-				}
-			}
-		}
-	}
-
 	now := time.Now().UTC()
 
 	// Mark jobs as cancelled.
@@ -305,25 +271,46 @@ func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) 
 		WHERE deployment_id = ? AND status IN ('queued', 'running')
 	`, string(deploy.JobCancelled), now, deploymentID)
 
-	if !vmDeletedOK && vmid.Valid {
-		// Si la suppression VM a échoué, on laisse le déploiement dans la DB
-		// avec un message d'erreur explicite.
+	if vmid.Valid {
+		// VM exists: mark as deleting and run destruction in background.
 		_, _ = s.DB.Sql().ExecContext(ctx, `
-			UPDATE deployments
-			SET status = ?, error_message = ?, updated_at = ?
-			WHERE id = ?
-		`, string(deploy.StatusFailed), "Échec de la suppression de la VM sur Proxmox. Vérifiez Proxmox avant de réessayer.", now, deploymentID)
-		http.Error(w, "Échec de la suppression de la VM sur Proxmox", http.StatusBadGateway)
+			UPDATE deployments SET status = ?, updated_at = ? WHERE id = ?
+		`, string(deploy.StatusDeleting), now, deploymentID)
+
+		// Run VM destruction in background; always delete from DB when done.
+		go func(depID int64, vmID int64, reqJSON string) {
+			s.deleteVMAndDeployment(context.Background(), depID, vmID, reqJSON)
+		}(deploymentID, vmid.Int64, reqJSON)
+
+		w.WriteHeader(http.StatusAccepted)
 		return
 	}
 
-	// Si la VM est supprimée (ou n'a jamais été créée), on peut retirer
-	// le déploiement du dashboard.
-	_, _ = s.DB.Sql().ExecContext(ctx, `
-		DELETE FROM deployments WHERE id = ?
-	`, deploymentID)
-
+	// No VM: delete from DB immediately.
+	_, _ = s.DB.Sql().ExecContext(ctx, `DELETE FROM deployments WHERE id = ?`, deploymentID)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) deleteVMAndDeployment(ctx context.Context, deploymentID int64, vmid int64, reqJSON string) {
+	cfg, err := config.LoadProxmoxConfig(ctx, s.DB)
+	if err != nil {
+		_, _ = s.DB.Sql().ExecContext(ctx, `DELETE FROM deployments WHERE id = ?`, deploymentID)
+		return
+	}
+	cl, err := proxmox.NewClient(cfg.APIURL, cfg.APITokenID, cfg.APITokenSecret)
+	if err != nil {
+		_, _ = s.DB.Sql().ExecContext(ctx, `DELETE FROM deployments WHERE id = ?`, deploymentID)
+		return
+	}
+	var req deploy.MinecraftDeploymentRequest
+	_ = json.Unmarshal([]byte(reqJSON), &req)
+	node := req.Node
+	if node == "" {
+		node = cfg.DefaultNode
+	}
+	_, _ = cl.StopVM(ctx, node, int(vmid))
+	_, _ = cl.DeleteVM(ctx, node, int(vmid))
+	_, _ = s.DB.Sql().ExecContext(ctx, `DELETE FROM deployments WHERE id = ?`, deploymentID)
 }
 
 type assignDeploymentRequest struct {

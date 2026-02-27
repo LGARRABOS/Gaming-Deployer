@@ -32,11 +32,12 @@ type Store interface {
 type DeploymentStatus string
 
 const (
-	StatusQueued  DeploymentStatus = "queued"
-	StatusRunning DeploymentStatus = "running"
-	StatusSuccess DeploymentStatus = "success"
-	StatusFailed  DeploymentStatus = "failed"
+	StatusQueued   DeploymentStatus = "queued"
+	StatusRunning  DeploymentStatus = "running"
+	StatusSuccess  DeploymentStatus = "success"
+	StatusFailed   DeploymentStatus = "failed"
 	StatusCancelled DeploymentStatus = "cancelled"
+	StatusDeleting DeploymentStatus = "deleting"
 )
 
 // JobStatus represents job state in jobs table.
@@ -141,7 +142,9 @@ func updateDeploymentStatus(ctx context.Context, db Store, deploymentID int64, s
 
 // ProcessJob runs the deployment pipeline for a single job.
 func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig) error {
-	dryRun := os.Getenv("DRY_RUN") == "true"
+	if os.Getenv("DRY_RUN") == "true" {
+		return fmt.Errorf("DRY_RUN=true: les déploiements sont désactivés. Mettez DRY_RUN=false dans /opt/proxmox-game-deployer/.env puis redémarrez le service")
+	}
 
 	var req MinecraftDeploymentRequest
 	if err := json.Unmarshal([]byte(j.PayloadJSON), &req); err != nil {
@@ -249,10 +252,7 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 	ipCIDR := fmt.Sprintf("%s/%d", req.IPAddress, req.CIDR)
 	ip := req.IPAddress
 
-	if dryRun {
-		appendLog(ctx, db, *deploymentID, "info", "DRY_RUN is enabled, simulating steps without touching Proxmox or the VM")
-		time.Sleep(1 * time.Second)
-	} else {
+	{
 		appendLog(ctx, db, *deploymentID, "info", "Requesting next VMID from Proxmox")
 		vmid, err = c.NextID(ctx)
 		if err != nil {
@@ -325,9 +325,7 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 
 	appendLog(ctx, db, *deploymentID, "info", "Running Ansible playbook to provision Minecraft server")
 
-	if dryRun {
-		appendLog(ctx, db, *deploymentID, "info", "DRY_RUN enabled: skipping actual ansible-playbook invocation")
-	} else {
+	{
 		if err := runAnsibleMinecraft(ctx, req, ip, cfg.SSHUser); err != nil {
 			appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Ansible provisioning failed: %v", err))
 			return err

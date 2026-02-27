@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { apiGet } from "../api/client";
 
 interface DeploymentListItem {
@@ -21,6 +21,8 @@ const statusLabel: Record<string, string> = {
 };
 
 export const DeploymentsListPage: React.FC = () => {
+  const location = useLocation();
+  const deletedId = (location.state as { deletedId?: number } | null)?.deletedId;
   const [items, setItems] = useState<DeploymentListItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +59,7 @@ export const DeploymentsListPage: React.FC = () => {
     );
   }
 
-  const list = items ?? [];
+  const list = (items ?? []).filter((d) => d.id !== deletedId);
 
   return (
     <div className="page-wrap">

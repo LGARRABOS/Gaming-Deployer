@@ -174,7 +174,7 @@ export const DeploymentDetailsPage: React.FC = () => {
     setDeleteError(null);
     try {
       await apiDelete(`/api/deployments/${deploymentId}`);
-      navigate("/deployments");
+      navigate("/deployments", { state: { deletedId: deploymentId } });
     } catch (e: unknown) {
       setDeleteError((e as Error).message ?? "Erreur lors de la suppression");
     } finally {
