@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"net"
 	neturl "net/url"
+	"regexp"
 	"strings"
 )
 
 // ValidateMinecraftRequest performs basic validation on deployment inputs.
 func ValidateMinecraftRequest(req MinecraftDeploymentRequest) error {
-	if req.Name == "" {
-		return errors.New("name is required")
+	if err := validateDeploymentName(req.Name); err != nil {
+		return err
 	}
 	if req.Cores <= 0 {
 		return errors.New("cores must be > 0")
@@ -98,6 +99,25 @@ func ValidateMinecraftRequest(req MinecraftDeploymentRequest) error {
 	}
 	if req.Minecraft.MaxPlayers <= 0 {
 		return errors.New("max_players must be > 0")
+	}
+	return nil
+}
+
+// validateDeploymentName ensures the name is compatible with Proxmox VM naming:
+// - non-empty
+// - max length 60
+// - only letters, digits, dot, dash and underscore (no spaces or accents).
+func validateDeploymentName(name string) error {
+	n := strings.TrimSpace(name)
+	if n == "" {
+		return errors.New("name is required")
+	}
+	if len(n) > 60 {
+		return errors.New("name must be at most 60 characters")
+	}
+	var re = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
+	if !re.MatchString(n) {
+		return errors.New("name may only contain letters, digits, '.', '-', '_' (no spaces or special characters)")
 	}
 	return nil
 }

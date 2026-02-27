@@ -8,8 +8,8 @@ import (
 
 // ValidateHytaleRequest performs basic validation on Hytale deployment inputs.
 func ValidateHytaleRequest(req HytaleDeploymentRequest) error {
-	if req.Name == "" {
-		return errors.New("name is required")
+	if err := validateDeploymentName(req.Name); err != nil {
+		return err
 	}
 	if req.Cores <= 0 {
 		return errors.New("cores must be > 0")

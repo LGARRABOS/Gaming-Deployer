@@ -19,6 +19,10 @@
 - name: Ensure APT cache is updated
   apt:
     update_cache: true
+  register: apt_update
+  until: apt_update is succeeded
+  retries: 10
+  delay: 10
   when: ansible_os_family == "Debian"
 
 - name: Install prerequisites for Adoptium repo
@@ -28,6 +32,10 @@
       - apt-transport-https
       - gpg
     state: present
+  register: apt_prereq
+  until: apt_prereq is succeeded
+  retries: 10
+  delay: 10
   when: ansible_os_family == "Debian"
 
 - name: Add Eclipse Adoptium GPG key
@@ -54,12 +62,20 @@
 - name: Update apt cache after adding Adoptium repo
   apt:
     update_cache: true
+  register: apt_update_adoptium
+  until: apt_update_adoptium is succeeded
+  retries: 10
+  delay: 10
   when: ansible_os_family == "Debian" and adoptium_repo.changed
 
 - name: Install Java 25 runtime (Eclipse Temurin)
   apt:
     name: temurin-25-jre
     state: present
+  register: apt_java
+  until: apt_java is succeeded
+  retries: 10
+  delay: 10
   when: ansible_os_family == "Debian"
 
 - name: Create hytale user (only when not using admin user)
