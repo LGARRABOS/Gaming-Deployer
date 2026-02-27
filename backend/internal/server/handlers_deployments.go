@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -83,15 +84,17 @@ func (s *Server) handleCreateHytaleDeployment(w http.ResponseWriter, r *http.Req
 
 // handleListDeployments returns a list of deployments.
 // Query param ?game=minecraft|hytale filters by game.
+// Deployments with status "deleting" are excluded (async delete in progress).
 func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 	game := r.URL.Query().Get("game")
 	query := `
 		SELECT id, game, type, status, vmid, ip_address, created_at, updated_at
 		FROM deployments
+		WHERE status != 'deleting'
 	`
 	args := []any{}
 	if game == "minecraft" || game == "hytale" {
-		query += ` WHERE game = ?`
+		query += ` AND game = ?`
 		args = append(args, game)
 	}
 	query += ` ORDER BY created_at DESC LIMIT 100`
@@ -302,43 +305,6 @@ func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Attempt to destroy the VM if we have a VMID.
-	vmDeletedOK := true
-
-	if vmid.Valid {
-		cfg, err := config.LoadProxmoxConfig(ctx, s.DB)
-		if err == nil {
-			cl, err := proxmox.NewClient(cfg.APIURL, cfg.APITokenID, cfg.APITokenSecret)
-			if err == nil {
-				var req struct {
-					Node string `json:"node"`
-				}
-				if err := json.Unmarshal([]byte(reqJSON), &req); err == nil {
-					node := req.Node
-					if node == "" {
-						node = cfg.DefaultNode
-					}
-					// Try stopping, then deleting la VM. En cas d'erreur, on garde
-					// le déploiement visible et on remonte l'erreur à l'appelant.
-					if upid, err := cl.StopVM(ctx, node, int(vmid.Int64)); err == nil {
-						if err := cl.WaitForTask(ctx, node, upid, 5*time.Minute); err != nil {
-							vmDeletedOK = false
-						}
-					} else {
-						vmDeletedOK = false
-					}
-					if upid, err := cl.DeleteVM(ctx, node, int(vmid.Int64)); err == nil {
-						if err := cl.WaitForTask(ctx, node, upid, 10*time.Minute); err != nil {
-							vmDeletedOK = false
-						}
-					} else {
-						vmDeletedOK = false
-					}
-				}
-			}
-		}
-	}
-
 	now := time.Now().UTC()
 
 	// Mark jobs as cancelled.
@@ -348,25 +314,79 @@ func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) 
 		WHERE deployment_id = ? AND status IN ('queued', 'running')
 	`, string(deploy.JobCancelled), now, deploymentID)
 
-	if !vmDeletedOK && vmid.Valid {
-		// Si la suppression VM a échoué, on laisse le déploiement dans la DB
-		// avec un message d'erreur explicite.
-		_, _ = s.DB.Sql().ExecContext(ctx, `
-			UPDATE deployments
-			SET status = ?, error_message = ?, updated_at = ?
-			WHERE id = ?
-		`, string(deploy.StatusFailed), "Échec de la suppression de la VM sur Proxmox. Vérifiez Proxmox avant de réessayer.", now, deploymentID)
-		http.Error(w, "Échec de la suppression de la VM sur Proxmox", http.StatusBadGateway)
+	if !vmid.Valid {
+		// No VM: delete immediately (fast).
+		_, _ = s.DB.Sql().ExecContext(ctx, `DELETE FROM deployments WHERE id = ?`, deploymentID)
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
-	// Si la VM est supprimée (ou n'a jamais été créée), on peut retirer
-	// le déploiement du dashboard.
+	// VM exists: run Proxmox stop+delete in background to avoid HTTP timeout.
 	_, _ = s.DB.Sql().ExecContext(ctx, `
-		DELETE FROM deployments WHERE id = ?
-	`, deploymentID)
+		UPDATE deployments SET status = ?, updated_at = ? WHERE id = ?
+	`, "deleting", now, deploymentID)
 
-	w.WriteHeader(http.StatusNoContent)
+	go s.deleteDeploymentAsync(deploymentID, vmid.Int64, reqJSON)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	_, _ = w.Write([]byte(`{"status":"deleting","message":"Suppression en cours. La VM sera supprimée en arrière-plan."}`))
+}
+
+// deleteDeploymentAsync runs in background: stops VM, deletes VM on Proxmox, then removes deployment from DB.
+func (s *Server) deleteDeploymentAsync(deploymentID int64, vmid int64, reqJSON string) {
+	ctx := context.Background()
+
+	cfg, err := config.LoadProxmoxConfig(ctx, s.DB)
+	if err != nil {
+		s.finishAsyncDelete(deploymentID, "Config Proxmox introuvable")
+		return
+	}
+	cl, err := proxmox.NewClient(cfg.APIURL, cfg.APITokenID, cfg.APITokenSecret)
+	if err != nil {
+		s.finishAsyncDelete(deploymentID, "Erreur client Proxmox")
+		return
+	}
+	var req struct {
+		Node string `json:"node"`
+	}
+	if err := json.Unmarshal([]byte(reqJSON), &req); err != nil {
+		s.finishAsyncDelete(deploymentID, "Requête invalide")
+		return
+	}
+	node := req.Node
+	if node == "" {
+		node = cfg.DefaultNode
+	}
+
+	vmDeletedOK := true
+	if upid, err := cl.StopVM(ctx, node, int(vmid)); err == nil {
+		if err := cl.WaitForTask(ctx, node, upid, 5*time.Minute); err != nil {
+			vmDeletedOK = false
+		}
+	} else {
+		vmDeletedOK = false
+	}
+	if upid, err := cl.DeleteVM(ctx, node, int(vmid)); err == nil {
+		if err := cl.WaitForTask(ctx, node, upid, 10*time.Minute); err != nil {
+			vmDeletedOK = false
+		}
+	} else {
+		vmDeletedOK = false
+	}
+
+	if !vmDeletedOK {
+		s.finishAsyncDelete(deploymentID, "Échec de la suppression de la VM sur Proxmox. Vérifiez Proxmox.")
+		return
+	}
+
+	_, _ = s.DB.Sql().ExecContext(ctx, `DELETE FROM deployments WHERE id = ?`, deploymentID)
+}
+
+func (s *Server) finishAsyncDelete(deploymentID int64, errMsg string) {
+	_, _ = s.DB.Sql().ExecContext(context.Background(), `
+		UPDATE deployments SET status = ?, error_message = ?, updated_at = ? WHERE id = ?
+	`, string(deploy.StatusFailed), errMsg, time.Now().UTC(), deploymentID)
 }
 
 type assignDeploymentRequest struct {
