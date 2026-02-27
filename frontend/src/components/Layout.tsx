@@ -127,7 +127,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         </nav>
       </header>
       <div className="app-shell">
-        {(isMinecraftSection || isAdminSection) && (
+        {(isMinecraftSection || isHytaleSection || isAdminSection) && (
           <aside className="sidebar">
             <nav className="sidebar-nav">
               {isMinecraftSection && (
