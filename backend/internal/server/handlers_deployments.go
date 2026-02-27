@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -350,8 +351,23 @@ func (s *Server) deleteVMAndDeployment(ctx context.Context, deploymentID int64, 
 	if node == "" {
 		node = cfg.DefaultNode
 	}
-	_, _ = cl.StopVM(ctx, node, int(vmid))
-	_, _ = cl.DeleteVM(ctx, node, int(vmid))
+
+	// Best-effort: stop then delete the VM, logging any errors but always
+	// removing the deployment record from the DB so the UI stays consistent.
+	if upid, err := cl.StopVM(ctx, node, int(vmid)); err != nil {
+		log.Printf("deleteVMAndDeployment: StopVM failed for vmid=%d on node=%s: %v", vmid, node, err)
+	} else if upid != "" {
+		if err := cl.WaitForTask(ctx, node, upid, 5*time.Minute); err != nil {
+			log.Printf("deleteVMAndDeployment: WaitForTask(stop) failed for vmid=%d on node=%s: %v", vmid, node, err)
+		}
+	}
+	if upid, err := cl.DeleteVM(ctx, node, int(vmid)); err != nil {
+		log.Printf("deleteVMAndDeployment: DeleteVM failed for vmid=%d on node=%s: %v", vmid, node, err)
+	} else if upid != "" {
+		if err := cl.WaitForTask(ctx, node, upid, 10*time.Minute); err != nil {
+			log.Printf("deleteVMAndDeployment: WaitForTask(delete) failed for vmid=%d on node=%s: %v", vmid, node, err)
+		}
+	}
 	_, _ = s.DB.Sql().ExecContext(ctx, `DELETE FROM deployments WHERE id = ?`, deploymentID)
 }
 

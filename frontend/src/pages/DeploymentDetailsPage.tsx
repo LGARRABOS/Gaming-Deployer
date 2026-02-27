@@ -169,12 +169,13 @@ export const DeploymentDetailsPage: React.FC = () => {
   if (error) return <div className="card page-card"><p className="error">{error}</p></div>;
   if (!deployment) return <div className="card page-card"><p className="error">Déploiement introuvable</p></div>;
 
+  const listPath = deployment?.game === "hytale" ? "/hytale/deployments" : "/deployments";
+
   const onDelete = async () => {
     setDeleting(true);
     setDeleteError(null);
     try {
       await apiDelete(`/api/deployments/${deploymentId}`);
-      const listPath = deployment?.game === "hytale" ? "/hytale/deployments" : "/deployments";
       navigate(listPath, { state: { deletedId: deploymentId }, replace: true });
     } catch (e: unknown) {
       setDeleteError((e as Error).message ?? "Erreur lors de la suppression");
@@ -186,7 +187,9 @@ export const DeploymentDetailsPage: React.FC = () => {
   return (
     <div className="page-wrap deployment-detail-page">
       <nav className="page-breadcrumb">
-        <Link to="/deployments">Déploiements</Link>
+        <Link to={listPath}>
+          {deployment.game === "hytale" ? "Déploiements Hytale" : "Déploiements"}
+        </Link>
         <span className="page-breadcrumb-sep">/</span>
         <span>#{deployment.id}</span>
       </nav>
@@ -210,7 +213,7 @@ export const DeploymentDetailsPage: React.FC = () => {
       )}
 
       <div className="card page-panel deployment-network-info">
-        <h2 className="page-panel-title">Connexion au serveur Minecraft</h2>
+        <h2 className="page-panel-title">Connexion au serveur de jeu</h2>
         <p className="page-panel-desc">
           IP et port à ouvrir sur votre box / routeur pour permettre les connexions depuis Internet.
         </p>
@@ -237,7 +240,7 @@ export const DeploymentDetailsPage: React.FC = () => {
               </span>
             )}
           </dd>
-          <dt>Port du serveur Minecraft</dt>
+          <dt>Port du serveur</dt>
           <dd>
             <code>{getMinecraftPortFromRequest(deployment.request_json)}</code>
           </dd>

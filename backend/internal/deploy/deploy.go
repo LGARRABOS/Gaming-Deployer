@@ -331,7 +331,7 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 		updateDeploymentStatus(ctx, db, *deploymentID, StatusRunning, &vmid, &ip, nil, nil)
 
 		appendLog(ctx, db, *deploymentID, "info", "Configuring VM resources and cloud-init networking")
-		if err := c.ConfigureVM(ctx, req.Node, vmid, req.Cores, req.MemoryMB, req.DiskGB, req.Bridge, req.VLAN, ipCIDR, req.Gateway); err != nil {
+		if err := c.ConfigureVM(ctx, req.Node, vmid, req.Cores, req.MemoryMB, req.DiskGB, req.Bridge, req.VLAN, ipCIDR, req.Gateway, "minecraft-auto-serveur"); err != nil {
 			appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Configure VM failed: %v", err))
 			return err
 		}
@@ -534,7 +534,7 @@ func ProcessHytaleJob(ctx context.Context, db Store, j *Job, cfg *config.Proxmox
 		updateDeploymentStatus(ctx, db, *deploymentID, StatusRunning, &vmid, &ip, nil, nil)
 
 		appendLog(ctx, db, *deploymentID, "info", "Configuring VM resources and cloud-init networking")
-		if err := c.ConfigureVM(ctx, req.Node, vmid, req.Cores, req.MemoryMB, req.DiskGB, req.Bridge, req.VLAN, ipCIDR, req.Gateway); err != nil {
+		if err := c.ConfigureVM(ctx, req.Node, vmid, req.Cores, req.MemoryMB, req.DiskGB, req.Bridge, req.VLAN, ipCIDR, req.Gateway, "hytale-auto-serveur"); err != nil {
 			appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Configure VM failed: %v", err))
 			return err
 		}
@@ -618,6 +618,9 @@ func runAnsibleHytale(ctx context.Context, req HytaleDeploymentRequest, hostIP, 
 	extraVars["target_host"] = hostIP
 	extraVars["hytale_session_token"] = tokens.SessionToken
 	extraVars["hytale_identity_token"] = tokens.IdentityToken
+	if v := os.Getenv("HYTALE_SERVER_FILES_DIR"); v != "" {
+		extraVars["hytale_server_files_dir"] = v
+	}
 
 	extraJSON, err := json.Marshal(extraVars)
 	if err != nil {

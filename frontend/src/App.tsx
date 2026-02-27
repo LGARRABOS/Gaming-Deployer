@@ -128,6 +128,14 @@ const AppRoutes: React.FC = () => {
         }
       />
       <Route
+        path="/hytale/deployments/:id"
+        element={
+          <Layout>
+            <DeploymentDetailsPage />
+          </Layout>
+        }
+      />
+      <Route
         path="/games/placeholder"
         element={
           <Layout>

@@ -69,7 +69,7 @@ export const CreateHytaleServerPage: React.FC = () => {
     try {
       await apiPost("/api/deployments/hytale/validate", payload);
       const res = await apiPost<{ deployment_id: number }>("/api/deployments/hytale", payload);
-      navigate(`/deployments/${res.deployment_id}`);
+      navigate(`/hytale/deployments/${res.deployment_id}`);
     } catch (e: unknown) {
       setError((e as Error).message ?? "Erreur lors de la création du déploiement");
     } finally {

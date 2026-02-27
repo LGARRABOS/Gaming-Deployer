@@ -123,8 +123,8 @@ func (c *Client) CloneVM(ctx context.Context, node string, templateVMID, newVMID
 	return taskID, nil
 }
 
-// ConfigureVM sets CPU, memory and network including cloud-init ipconfig0.
-func (c *Client) ConfigureVM(ctx context.Context, node string, vmid int, cores, memoryMB, diskGB int, bridge string, vlanTag *int, ipCIDR, gateway string) error {
+// ConfigureVM sets CPU, memory, network and tags (including cloud-init ipconfig0).
+func (c *Client) ConfigureVM(ctx context.Context, node string, vmid int, cores, memoryMB, diskGB int, bridge string, vlanTag *int, ipCIDR, gateway, tags string) error {
 	path := fmt.Sprintf("/nodes/%s/qemu/%d/config", node, vmid)
 	q := url.Values{}
 	if cores > 0 {
@@ -142,7 +142,9 @@ func (c *Client) ConfigureVM(ctx context.Context, node string, vmid int, cores, 
 		q.Set("ipconfig0", fmt.Sprintf("ip=%s,gw=%s", ipCIDR, gateway))
 	}
 	// Tag VMs déployées par l'application pour les filtrer facilement.
-	q.Set("tags", "Minecraft-Auto-Serveur")
+	if tags != "" {
+		q.Set("tags", tags)
+	}
 	return c.do(ctx, http.MethodPost, path, q, nil)
 }
 
