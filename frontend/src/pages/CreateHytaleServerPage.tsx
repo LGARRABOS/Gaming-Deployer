@@ -3,22 +3,15 @@ import { Link, useNavigate } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
 
 interface HytaleConfig {
-  port: number;
   max_players: number;
   jvm_heap: string;
   jvm_flags: string;
-  backup_enabled: boolean;
-  backup_frequency: string;
-  backup_retention: number;
-  admin_user: string;
-  admin_password: string;
 }
 
 interface FormState {
   name: string;
   cores: number;
   memory_mb: number;
-  disk_gb: number;
   hytale: HytaleConfig;
 }
 
@@ -29,17 +22,10 @@ export const CreateHytaleServerPage: React.FC = () => {
     name: "",
     cores: 2,
     memory_mb: 4096,
-    disk_gb: 50,
     hytale: {
-      port: 5520,
       max_players: 20,
       jvm_heap: "2G",
       jvm_flags: "",
-      backup_enabled: false,
-      backup_frequency: "24h",
-      backup_retention: 7,
-      admin_user: "hytaleadmin",
-      admin_password: "",
     },
   });
   const [submitting, setSubmitting] = useState(false);
@@ -67,9 +53,22 @@ export const CreateHytaleServerPage: React.FC = () => {
     }
     setSubmitting(true);
     setError(null);
+    const payload = {
+      ...form,
+      disk_gb: 50,
+      hytale: {
+        ...form.hytale,
+        port: 0,
+        backup_enabled: false,
+        backup_frequency: "24h",
+        backup_retention: 7,
+        admin_user: "",
+        admin_password: "",
+      },
+    };
     try {
-      await apiPost("/api/deployments/hytale/validate", form);
-      const res = await apiPost<{ deployment_id: number }>("/api/deployments/hytale", form);
+      await apiPost("/api/deployments/hytale/validate", payload);
+      const res = await apiPost<{ deployment_id: number }>("/api/deployments/hytale", payload);
       navigate(`/deployments/${res.deployment_id}`);
     } catch (e: unknown) {
       setError((e as Error).message ?? "Erreur lors de la création du déploiement");
@@ -129,33 +128,16 @@ export const CreateHytaleServerPage: React.FC = () => {
                 <option value={32768}>32 GB</option>
               </select>
             </label>
-            <label>
-              <span>Stockage (Go)</span>
-              <input
-                type="number"
-                value={form.disk_gb}
-                onChange={(e) => update("disk_gb", Number(e.target.value))}
-                min={10}
-                max={500}
-              />
-            </label>
           </div>
+          <p className="page-panel-desc" style={{ marginTop: "0.5rem" }}>
+            Stockage par défaut : 50 Go.
+          </p>
         </section>
 
         <section className="card page-panel">
           <h2 className="page-panel-title">Hytale</h2>
           <p className="page-panel-desc">Paramètres du serveur de jeu.</p>
           <div className="form-grid form-grid--wide">
-            <label>
-              <span>Port (UDP)</span>
-              <input
-                type="number"
-                value={form.hytale.port}
-                onChange={(e) => updateHytale("port", Number(e.target.value))}
-                min={1}
-                max={65535}
-              />
-            </label>
             <label>
               <span>Max joueurs</span>
               <input
@@ -178,56 +160,6 @@ export const CreateHytaleServerPage: React.FC = () => {
                 value={form.hytale.jvm_flags}
                 onChange={(e) => updateHytale("jvm_flags", e.target.value)}
                 placeholder="-XX:+UseG1GC"
-              />
-            </label>
-            <label className="form-check">
-              <input
-                type="checkbox"
-                checked={form.hytale.backup_enabled}
-                onChange={(e) => updateHytale("backup_enabled", e.target.checked)}
-              />
-              <span>Sauvegardes automatiques</span>
-            </label>
-            {form.hytale.backup_enabled && (
-              <>
-                <label>
-                  <span>Fréquence</span>
-                  <select
-                    value={form.hytale.backup_frequency}
-                    onChange={(e) => updateHytale("backup_frequency", e.target.value)}
-                  >
-                    <option value="12h">Toutes les 12 h</option>
-                    <option value="24h">Quotidien</option>
-                    <option value="48h">Tous les 2 jours</option>
-                  </select>
-                </label>
-                <label>
-                  <span>Rétention (nombre)</span>
-                  <input
-                    type="number"
-                    value={form.hytale.backup_retention}
-                    onChange={(e) => updateHytale("backup_retention", Number(e.target.value))}
-                    min={1}
-                    max={30}
-                  />
-                </label>
-              </>
-            )}
-            <label>
-              <span>Utilisateur SFTP (admin)</span>
-              <input
-                value={form.hytale.admin_user}
-                onChange={(e) => updateHytale("admin_user", e.target.value)}
-                placeholder="hytaleadmin"
-              />
-            </label>
-            <label>
-              <span>Mot de passe SFTP</span>
-              <input
-                type="password"
-                value={form.hytale.admin_password}
-                onChange={(e) => updateHytale("admin_password", e.target.value)}
-                placeholder="Généré automatiquement si vide"
               />
             </label>
           </div>

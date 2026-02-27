@@ -469,16 +469,6 @@ func ProcessHytaleJob(ctx context.Context, db Store, j *Job, cfg *config.Proxmox
 		req.Hytale.Port = port
 	}
 
-	if !req.Hytale.BackupEnabled {
-		req.Hytale.BackupEnabled = true
-		if req.Hytale.BackupFrequency == "" {
-			req.Hytale.BackupFrequency = "24h"
-		}
-		if req.Hytale.BackupRetention == 0 {
-			req.Hytale.BackupRetention = 2
-		}
-	}
-
 	if req.Hytale.AdminUser == "" {
 		req.Hytale.AdminUser = "hytaleadmin"
 	}
