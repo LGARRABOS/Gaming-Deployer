@@ -105,9 +105,16 @@ func (w *Worker) processNextJob(ctx context.Context) error {
 		return err
 	}
 
+	log.Printf("[worker] processing job id=%d type=%s deployment_id=%v", job.ID, job.Type, job.DeploymentID)
+
 	// Load proxmox config.
 	cfg, err := config.LoadProxmoxConfig(ctx, w.DB)
 	if err != nil {
+		log.Printf("[worker] failed to load Proxmox config: %v", err)
+		markJobAndDeploymentFailed(ctx, w.DB, &job, err)
+		errMsg := err.Error()
+		_, _ = w.DB.ExecContext(ctx, `UPDATE jobs SET status = ?, last_error = ?, updated_at = ? WHERE id = ?`,
+			string(JobFailed), errMsg, time.Now().UTC(), job.ID)
 		return err
 	}
 
@@ -124,9 +131,13 @@ func (w *Worker) processNextJob(ctx context.Context) error {
 	finalStatus := JobDone
 	var lastError *string
 	if err != nil {
+		log.Printf("[worker] job id=%d failed: %v", job.ID, err)
 		msg := err.Error()
 		lastError = &msg
 		finalStatus = JobFailed
+		markJobAndDeploymentFailed(ctx, w.DB, &job, err)
+	} else {
+		log.Printf("[worker] job id=%d completed successfully", job.ID)
 	}
 
 	// Update job final status.
@@ -136,5 +147,17 @@ func (w *Worker) processNextJob(ctx context.Context) error {
 	`, string(finalStatus), lastError, time.Now().UTC(), job.ID)
 
 	return err
+}
+
+// markJobAndDeploymentFailed updates both the job and the deployment with failed status and error message.
+func markJobAndDeploymentFailed(ctx context.Context, db Store, job *Job, err error) {
+	if job.DeploymentID == nil {
+		return
+	}
+	errMsg := err.Error()
+	_, _ = db.ExecContext(ctx, `
+		UPDATE deployments SET status = ?, error_message = ?, updated_at = ?
+		WHERE id = ?
+	`, string(StatusFailed), errMsg, time.Now().UTC(), *job.DeploymentID)
 }
 
