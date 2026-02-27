@@ -339,19 +339,19 @@ func (s *Server) deleteDeploymentAsync(deploymentID int64, vmid int64, reqJSON s
 
 	cfg, err := config.LoadProxmoxConfig(ctx, s.DB)
 	if err != nil {
-		s.finishAsyncDelete(deploymentID, "Config Proxmox introuvable")
+		s.finishAsyncDelete(deploymentID)
 		return
 	}
 	cl, err := proxmox.NewClient(cfg.APIURL, cfg.APITokenID, cfg.APITokenSecret)
 	if err != nil {
-		s.finishAsyncDelete(deploymentID, "Erreur client Proxmox")
+		s.finishAsyncDelete(deploymentID)
 		return
 	}
 	var req struct {
 		Node string `json:"node"`
 	}
 	if err := json.Unmarshal([]byte(reqJSON), &req); err != nil {
-		s.finishAsyncDelete(deploymentID, "Requête invalide")
+		s.finishAsyncDelete(deploymentID)
 		return
 	}
 	node := req.Node
@@ -359,34 +359,22 @@ func (s *Server) deleteDeploymentAsync(deploymentID int64, vmid int64, reqJSON s
 		node = cfg.DefaultNode
 	}
 
-	vmDeletedOK := true
+	// Tenter d'arrêter et supprimer la VM sur Proxmox (best-effort).
 	if upid, err := cl.StopVM(ctx, node, int(vmid)); err == nil {
-		if err := cl.WaitForTask(ctx, node, upid, 5*time.Minute); err != nil {
-			vmDeletedOK = false
-		}
-	} else {
-		vmDeletedOK = false
+		_ = cl.WaitForTask(ctx, node, upid, 5*time.Minute)
 	}
 	if upid, err := cl.DeleteVM(ctx, node, int(vmid)); err == nil {
-		if err := cl.WaitForTask(ctx, node, upid, 10*time.Minute); err != nil {
-			vmDeletedOK = false
-		}
-	} else {
-		vmDeletedOK = false
+		_ = cl.WaitForTask(ctx, node, upid, 10*time.Minute)
 	}
 
-	if !vmDeletedOK {
-		s.finishAsyncDelete(deploymentID, "Échec de la suppression de la VM sur Proxmox. Vérifiez Proxmox.")
-		return
-	}
-
+	// Toujours supprimer le déploiement de la DB pour qu'il disparaisse de l'interface.
+	// Si la VM n'a pas pu être supprimée sur Proxmox, elle peut rester orpheline (nettoyage manuel si besoin).
 	_, _ = s.DB.Sql().ExecContext(ctx, `DELETE FROM deployments WHERE id = ?`, deploymentID)
 }
 
-func (s *Server) finishAsyncDelete(deploymentID int64, errMsg string) {
-	_, _ = s.DB.Sql().ExecContext(context.Background(), `
-		UPDATE deployments SET status = ?, error_message = ?, updated_at = ? WHERE id = ?
-	`, string(deploy.StatusFailed), errMsg, time.Now().UTC(), deploymentID)
+func (s *Server) finishAsyncDelete(deploymentID int64) {
+	// En cas d'erreur (config, client), on supprime quand même le déploiement pour qu'il disparaisse.
+	_, _ = s.DB.Sql().ExecContext(context.Background(), `DELETE FROM deployments WHERE id = ?`, deploymentID)
 }
 
 type assignDeploymentRequest struct {
