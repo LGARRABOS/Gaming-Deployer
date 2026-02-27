@@ -72,6 +72,9 @@ func New(ctx context.Context, dbPath string) (*Server, error) {
 			r.Post("/hytale/auth/device", s.handleHytaleAuthDevice)
 			r.Get("/hytale/auth/poll", s.handleHytaleAuthPoll)
 			r.Delete("/hytale/auth", s.handleHytaleAuthDelete)
+			r.Get("/hytale/downloader/status", s.handleHytaleDownloaderStatus)
+			r.Post("/hytale/downloader/device", s.handleHytaleDownloaderDevice)
+			r.Get("/hytale/downloader/poll", s.handleHytaleDownloaderPoll)
 
 			// Paramètres Proxmox / SSH : réservé au propriétaire
 			r.Group(func(r chi.Router) {

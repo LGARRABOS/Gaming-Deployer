@@ -1,20 +1,10 @@
-# Hytale server files must be downloaded via the official Hytale Downloader or
-# decomp-project/hytale-downloader. The downloader requires OAuth credentials.
-# We pass session_token and identity_token to the server at runtime.
-# The server JAR and assets are expected to be present in hytale_dir.
+# Hytale server files are downloaded by the backend's internal downloader before
+# Ansible runs. The backend ensures HytaleServer.jar (and assets) are present in
+# hytale_server_files_dir on the Proxmox Game Deployer host. Ansible only copies
+# them into the VM.
 #
-# Option A: Pre-downloaded template - the Proxmox template VM may already
-#   contain the Hytale server files (downloaded manually or via a prior run).
-#
-# Option B: Use decomp-project/hytale-downloader with -credentials-path
-#   (non-interactive). The backend provides session/identity tokens at deploy
-#   time; we would need to create a credentials file from them.
-#
-# We support several modes:
-# - Template already has HytaleServer.jar + assets.
-# - Or automatic download on the Proxmox Game Deployer host into HYTALE_SERVER_FILES_DIR
-#   using hytale-downloader (device code flow shown in logs the first time),
-#   from which files are automatically copied into each VM on deploy.
+# - If the Proxmox template already has HytaleServer.jar, we skip the copy.
+# - Otherwise we copy from hytale_server_files_dir (always set by the backend).
 - name: Ensure Hytale directory exists (already done in hytale_base)
   file:
     path: "{{ hytale_dir }}"
@@ -23,70 +13,13 @@
     group: "{{ hytale_user }}"
     mode: "0755"
 
-- name: Check if HytaleServer.jar exists
+- name: Check if HytaleServer.jar exists in VM
   stat:
     path: "{{ hytale_dir }}/HytaleServer.jar"
   register: hytale_jar_stat
 
-# ---------------------------------------------------------------------------
-# Control node (Proxmox Game Deployer host) cache using hytale-downloader
-# ---------------------------------------------------------------------------
-
-- name: Check Hytale server cache on control node
-  when: (hytale_server_files_dir | default('')) != ''
-  delegate_to: localhost
-  become: false
-  run_once: true
-  stat:
-    path: "{{ hytale_server_files_dir }}/HytaleServer.jar"
-  register: hytale_cache_jar
-
-- name: Ensure Hytale server cache directory exists on control node
-  when: (hytale_server_files_dir | default('')) != ''
-  delegate_to: localhost
-  become: false
-  run_once: true
-  file:
-    path: "{{ hytale_server_files_dir }}"
-    state: directory
-    mode: "0755"
-
-- name: Download Hytale server files with hytale-downloader on control node
-  when:
-    - (hytale_server_files_dir | default('')) != ''
-    - not hytale_cache_jar.stat.exists
-  delegate_to: localhost
-  become: false
-  run_once: true
-  shell: |
-    set -e
-    cd "{{ hytale_server_files_dir }}"
-    # This command will, at first run, print a device auth URL + code in the
-    # logs. Open the URL, enter the code once, and the tool will cache
-    # credentials for future runs.
-    hytale-downloader -download-path hytale-server.zip -skip-update-check
-    if command -v unzip >/dev/null 2>&1; then
-      unzip -o hytale-server.zip
-    else
-      echo "unzip is required to extract hytale-server.zip" >&2
-      exit 1
-    fi
-  args:
-    creates: "{{ hytale_server_files_dir }}/HytaleServer.jar"
-
-- name: Re-check HytaleServer.jar in control node cache
-  when: (hytale_server_files_dir | default('')) != ''
-  delegate_to: localhost
-  become: false
-  run_once: true
-  stat:
-    path: "{{ hytale_server_files_dir }}/HytaleServer.jar"
-  register: hytale_cache_jar_after
-
-- name: Copy Hytale server files from control node if configured
-  when:
-    - not hytale_jar_stat.stat.exists
-    - (hytale_server_files_dir | default('')) != ''
+- name: Copy Hytale server files from deployer host cache to VM
+  when: not hytale_jar_stat.stat.exists
   copy:
     src: "{{ hytale_server_files_dir }}/"
     dest: "{{ hytale_dir }}/"
@@ -95,23 +28,17 @@
     mode: "0644"
 
 - name: Re-check if HytaleServer.jar exists after copy
-  when:
-    - not hytale_jar_stat.stat.exists
-    - (hytale_server_files_dir | default('')) != ''
+  when: not hytale_jar_stat.stat.exists
   stat:
     path: "{{ hytale_dir }}/HytaleServer.jar"
   register: hytale_jar_stat_after
 
 - name: Fail if HytaleServer.jar is still missing
   when:
-    - (not hytale_jar_stat.stat.exists)
-    - (hytale_jar_stat_after.stat.exists is not defined or not hytale_jar_stat_after.stat.exists)
+    - not hytale_jar_stat.stat.exists
+    - hytale_jar_stat_after.stat.exists is not defined or not hytale_jar_stat_after.stat.exists
   fail:
     msg: >
       HytaleServer.jar NOT FOUND in {{ hytale_dir }}.
-      Either bake server files into the Proxmox template, or install hytale-downloader
-      on the Proxmox Game Deployer host and ensure HYTALE_SERVER_FILES_DIR is set and writable.
-
-- name: Log Hytale server files status
-  debug:
-    msg: "HytaleServer.jar found in {{ hytale_dir }}"
+      The backend should have populated {{ hytale_server_files_dir }} before Ansible.
+      Check Hytale downloader auth at /hytale/auth (downloader scope) and service logs.

@@ -21,8 +21,10 @@ const AppConfigKey = "app_initialized"
 // ProxmoxConfigKey is the settings key for proxmox configuration.
 const ProxmoxConfigKey = "proxmox_config"
 
-// HytaleOAuthKey is the settings key for Hytale OAuth credentials (refresh_token, profile_uuid).
 const HytaleOAuthKey = "hytale_oauth"
+
+// HytaleDownloaderKey is the settings key for Hytale downloader OAuth credentials.
+const HytaleDownloaderKey = "hytale_downloader_oauth"
 
 // ProxmoxConfig holds the configuration required to talk to Proxmox and to provision VMs.
 type ProxmoxConfig struct {
@@ -166,5 +168,59 @@ func LoadHytaleOAuth(ctx context.Context, db Store) (*HytaleOAuthCredentials, er
 func DeleteHytaleOAuth(ctx context.Context, db Store) error {
 	_, err := db.ExecContext(ctx, `DELETE FROM settings WHERE key = ?`, HytaleOAuthKey)
 	return err
+}
+
+// HytaleDownloaderCredentials holds the stored OAuth data for the Hytale downloader client.
+// We currently only need a long-lived refresh token to obtain short-lived access tokens
+// when downloading or refreshing server files.
+type HytaleDownloaderCredentials struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+// SaveHytaleDownloader stores downloader OAuth credentials (encrypted if APP_ENC_KEY is set).
+func SaveHytaleDownloader(ctx context.Context, db Store, creds HytaleDownloaderCredentials) error {
+	raw, err := json.Marshal(creds)
+	if err != nil {
+		return err
+	}
+	value := string(raw)
+	if key := os.Getenv("APP_ENC_KEY"); key != "" {
+		enc, err := encrypt(value, key)
+		if err != nil {
+			return err
+		}
+		value = "enc:" + enc
+	}
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO settings (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value
+	`, HytaleDownloaderKey, value)
+	return err
+}
+
+// LoadHytaleDownloader loads downloader OAuth credentials.
+func LoadHytaleDownloader(ctx context.Context, db Store) (*HytaleDownloaderCredentials, error) {
+	row := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, HytaleDownloaderKey)
+	var v string
+	if err := row.Scan(&v); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if len(v) > 4 && v[:4] == "enc:" {
+		key := os.Getenv("APP_ENC_KEY")
+		if key != "" {
+			dec, err := decrypt(v[4:], key)
+			if err == nil {
+				v = dec
+			}
+		}
+	}
+	var creds HytaleDownloaderCredentials
+	if err := json.Unmarshal([]byte(v), &creds); err != nil {
+		return nil, err
+	}
+	return &creds, nil
 }
 

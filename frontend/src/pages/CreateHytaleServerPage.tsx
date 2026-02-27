@@ -18,6 +18,7 @@ interface FormState {
 export const CreateHytaleServerPage: React.FC = () => {
   const navigate = useNavigate();
   const [hytaleAuthConfigured, setHytaleAuthConfigured] = useState<boolean | null>(null);
+  const [downloaderAuthConfigured, setDownloaderAuthConfigured] = useState<boolean | null>(null);
   const [form, setForm] = useState<FormState>({
     name: "",
     cores: 2,
@@ -35,6 +36,9 @@ export const CreateHytaleServerPage: React.FC = () => {
     apiGet<{ configured: boolean }>("/api/hytale/auth/status")
       .then((res) => setHytaleAuthConfigured(res.configured))
       .catch(() => setHytaleAuthConfigured(false));
+    apiGet<{ configured: boolean }>("/api/hytale/downloader/status")
+      .then((res) => setDownloaderAuthConfigured(res.configured))
+      .catch(() => setDownloaderAuthConfigured(false));
   }, []);
 
   const update = (field: keyof FormState, value: unknown) => {
@@ -45,10 +49,13 @@ export const CreateHytaleServerPage: React.FC = () => {
     setForm((f) => ({ ...f, hytale: { ...f.hytale, [field]: value } }));
   };
 
+  const authReady = hytaleAuthConfigured && downloaderAuthConfigured;
+  const authMissing = hytaleAuthConfigured === false || downloaderAuthConfigured === false;
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!hytaleAuthConfigured) {
-      setError("Authentification Hytale requise. Configure-la d'abord.");
+    if (!authReady) {
+      setError("Authentifications Hytale requises (serveur + téléchargement). Configure-les dans Paramètres Hytale.");
       return;
     }
     setSubmitting(true);
@@ -86,11 +93,12 @@ export const CreateHytaleServerPage: React.FC = () => {
         </p>
       </header>
 
-      {hytaleAuthConfigured === false && (
+      {authMissing && (
         <div className="card page-panel page-panel--error">
           <p>
-            L&apos;authentification Hytale n&apos;est pas configurée.{" "}
-            <Link to="/hytale/auth">Configurer l&apos;authentification Hytale</Link> avant de créer un serveur.
+            {!hytaleAuthConfigured && "L'authentification serveur Hytale n'est pas configurée. "}
+            {!downloaderAuthConfigured && "L'authentification téléchargement n'est pas configurée. "}
+            <Link to="/hytale/auth">Configurer les authentifications Hytale</Link> avant de créer un serveur.
           </p>
         </div>
       )}
@@ -175,7 +183,7 @@ export const CreateHytaleServerPage: React.FC = () => {
           <button
             type="submit"
             className="btn btn--primary btn--large"
-            disabled={submitting || hytaleAuthConfigured === false}
+            disabled={submitting || !authReady}
           >
             {submitting ? "Déploiement en cours…" : "Déployer le serveur"}
           </button>

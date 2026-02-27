@@ -1,13 +1,13 @@
 # 🕹 Proxmox Game Deployer
 
-Automated deployment of Minecraft servers on Proxmox, with a Go backend, React frontend, and Ansible provisioning. teste
+Automated deployment of game servers (Minecraft, Hytale) on Proxmox, with a Go backend, React frontend, and Ansible provisioning.
 
 ---
 
 ## ✨ Overview
 
 - **Target**: Proxmox VE cluster with an Ubuntu cloud‑init template.
-- **Supported game**: Minecraft Java (vanilla, Forge, NeoForge, Fabric, modpacks).
+- **Supported games**: Minecraft Java (vanilla, Forge, NeoForge, Fabric, modpacks), Hytale.
 - **Roles**:
   - **Owner**: Proxmox configuration, user creation/deletion, full deployment rights.
   - **Admin**: manages deployments and servers, can view users and assign servers.
@@ -15,7 +15,7 @@ Automated deployment of Minecraft servers on Proxmox, with a Go backend, React f
 - **Stack**:
   - Go + SQLite for the API and orchestration.
   - React + Vite + TypeScript for the dashboard.
-  - Ansible to provision the Minecraft VM.
+  - Ansible to provision game VMs (Minecraft, Hytale).
 
 ---
 
@@ -59,7 +59,7 @@ More detailed configuration (env vars, typical issues, troubleshooting) lives in
 
 ## 🧩 Main features
 
-- Full Minecraft server provisioning (VM + Java + systemd service).
+- Full Minecraft and Hytale server provisioning (VM + Java + systemd service).
 - Advanced deployment form (CPU/RAM/disk, static IP, port, Minecraft type/version, modpacks).
 - Role-based access (owner / admin / user) and server assignment to users.
 - Basic monitoring (CPU/RAM/disk) and remote console.

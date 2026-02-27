@@ -575,10 +575,22 @@ func ProcessHytaleJob(ctx context.Context, db Store, j *Job, cfg *config.Proxmox
 		}
 	}
 
+	// Ensure Hytale server files are present on the deployer host (internal downloader).
+	// This runs before Ansible so the cache dir has HytaleServer.jar for copy to VM.
+	cacheDir := os.Getenv("HYTALE_SERVER_FILES_DIR")
+	if cacheDir == "" {
+		cacheDir = hytale.DefaultHytaleServerFilesDir()
+	}
+	appendLog(ctx, db, *deploymentID, "info", fmt.Sprintf("Ensuring Hytale server files in %s", cacheDir))
+	if err := hytale.EnsureServerFiles(ctx, db, cacheDir); err != nil {
+		appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Hytale server files: %v", err))
+		return fmt.Errorf("Hytale server files: %w", err)
+	}
+
 	appendLog(ctx, db, *deploymentID, "info", "Running Ansible playbook to provision Hytale server")
 
 	{
-		if err := runAnsibleHytale(ctx, req, ip, cfg.SSHUser, tokens); err != nil {
+		if err := runAnsibleHytale(ctx, req, ip, cfg.SSHUser, tokens, cacheDir); err != nil {
 			appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Ansible provisioning failed: %v", err))
 			return err
 		}
@@ -608,7 +620,7 @@ func ProcessHytaleJob(ctx context.Context, db Store, j *Job, cfg *config.Proxmox
 }
 
 // runAnsibleHytale spawns ansible-playbook for Hytale provisioning.
-func runAnsibleHytale(ctx context.Context, req HytaleDeploymentRequest, hostIP, sshUser string, tokens *hytale.SessionTokens) error {
+func runAnsibleHytale(ctx context.Context, req HytaleDeploymentRequest, hostIP, sshUser string, tokens *hytale.SessionTokens, cacheDir string) error {
 	playbook := "./ansible/provision_hytale.yml"
 	if v := os.Getenv("ANSIBLE_HYTALE_PLAYBOOK_PATH"); v != "" {
 		playbook = v
@@ -618,9 +630,7 @@ func runAnsibleHytale(ctx context.Context, req HytaleDeploymentRequest, hostIP, 
 	extraVars["target_host"] = hostIP
 	extraVars["hytale_session_token"] = tokens.SessionToken
 	extraVars["hytale_identity_token"] = tokens.IdentityToken
-	if v := os.Getenv("HYTALE_SERVER_FILES_DIR"); v != "" {
-		extraVars["hytale_server_files_dir"] = v
-	}
+	extraVars["hytale_server_files_dir"] = cacheDir
 
 	extraJSON, err := json.Marshal(extraVars)
 	if err != nil {

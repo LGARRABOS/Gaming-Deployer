@@ -111,3 +111,79 @@ func (s *Server) handleHytaleAuthDelete(w http.ResponseWriter, r *http.Request) 
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
+
+// handleHytaleDownloaderStatus returns whether Hytale downloader OAuth is configured.
+func (s *Server) handleHytaleDownloaderStatus(w http.ResponseWriter, r *http.Request) {
+	u := s.mustUser(r)
+	if u == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	creds, err := config.LoadHytaleDownloader(r.Context(), s.DB)
+	configured := err == nil && creds != nil && creds.RefreshToken != ""
+	writeJSON(w, http.StatusOK, map[string]any{"configured": configured})
+}
+
+// handleHytaleDownloaderDevice starts the OAuth device code flow for the downloader client.
+func (s *Server) handleHytaleDownloaderDevice(w http.ResponseWriter, r *http.Request) {
+	u := s.mustUser(r)
+	if u == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if u.Role != "owner" && u.Role != "admin" {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	result, err := hytale.StartDownloaderDeviceAuth(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"verification_url": result.VerificationURL,
+		"user_code":        result.UserCode,
+		"device_code":      result.DeviceCode,
+		"interval":         result.Interval,
+	})
+}
+
+// handleHytaleDownloaderPoll polls for the downloader token after user authorizes.
+func (s *Server) handleHytaleDownloaderPoll(w http.ResponseWriter, r *http.Request) {
+	u := s.mustUser(r)
+	if u == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if u.Role != "owner" && u.Role != "admin" {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	deviceCode := r.URL.Query().Get("device_code")
+	if deviceCode == "" {
+		http.Error(w, "device_code required", http.StatusBadRequest)
+		return
+	}
+
+	refreshToken, err := hytale.PollDownloaderTokenOnce(r.Context(), deviceCode)
+	if err != nil {
+		if err == hytale.ErrAuthPending {
+			writeJSON(w, http.StatusAccepted, map[string]any{"status": "pending"})
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := config.SaveHytaleDownloader(r.Context(), s.DB, config.HytaleDownloaderCredentials{
+		RefreshToken: refreshToken,
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
