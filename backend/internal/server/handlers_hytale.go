@@ -61,7 +61,7 @@ func (s *Server) handleHytaleAuthPoll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get profile UUID (optional - can be empty, we'll pick first at deploy time)
-	tokens, err := hytale.RefreshAndCreateSession(r.Context(), refreshToken, "")
+	tokens, newRefresh, err := hytale.RefreshAndCreateSession(r.Context(), refreshToken, "")
 	if err != nil {
 		http.Error(w, "failed to create session: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -69,7 +69,7 @@ func (s *Server) handleHytaleAuthPoll(w http.ResponseWriter, r *http.Request) {
 	_ = tokens // we have valid auth
 
 	creds := config.HytaleOAuthCredentials{
-		RefreshToken: refreshToken,
+		RefreshToken: newRefresh,
 		ProfileUUID:  "", // will be auto-selected at deploy
 	}
 	if err := config.SaveHytaleOAuth(r.Context(), s.DB, creds); err != nil {

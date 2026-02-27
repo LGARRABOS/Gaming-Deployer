@@ -198,10 +198,11 @@ func PollForToken(ctx context.Context, deviceCode string) (refreshToken string, 
 }
 
 // RefreshAndCreateSession uses a refresh token to obtain session tokens for the server.
+// It also returns the (possibly rotated) refresh token that should be persisted by the caller.
 // The refreshToken and profileUUID should be loaded from config by the caller.
-func RefreshAndCreateSession(ctx context.Context, refreshToken, profileUUID string) (*SessionTokens, error) {
+func RefreshAndCreateSession(ctx context.Context, refreshToken, profileUUID string) (*SessionTokens, string, error) {
 	if refreshToken == "" {
-		return nil, fmt.Errorf("Hytale OAuth not configured: authenticate at /hytale/auth first")
+		return nil, "", fmt.Errorf("Hytale OAuth not configured: authenticate at /hytale/auth first")
 	}
 
 	// Refresh access token
@@ -212,28 +213,35 @@ func RefreshAndCreateSession(ctx context.Context, refreshToken, profileUUID stri
 
 	req, err := http.NewRequestWithContext(ctx, "POST", oauthTokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("token refresh failed: %s", string(body))
+		return nil, "", fmt.Errorf("token refresh failed: %s", string(body))
 	}
 
 	var tok TokenResponse
 	if err := json.Unmarshal(body, &tok); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if tok.AccessToken == "" {
-		return nil, fmt.Errorf("no access token in refresh response")
+		return nil, "", fmt.Errorf("no access token in refresh response")
+	}
+
+	// Some providers rotate refresh tokens on each use. If a new refresh token is
+	// returned, prefer it over the one we were called with.
+	newRefresh := refreshToken
+	if tok.RefreshToken != "" {
+		newRefresh = tok.RefreshToken
 	}
 
 	// Get profiles if profileUUID not specified
@@ -241,10 +249,10 @@ func RefreshAndCreateSession(ctx context.Context, refreshToken, profileUUID stri
 	if uuid == "" {
 		profiles, err := getProfiles(ctx, tok.AccessToken)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		if len(profiles) == 0 {
-			return nil, fmt.Errorf("no Hytale profiles found")
+			return nil, "", fmt.Errorf("no Hytale profiles found")
 		}
 		uuid = profiles[0].UUID
 	}
@@ -252,13 +260,13 @@ func RefreshAndCreateSession(ctx context.Context, refreshToken, profileUUID stri
 	// Create game session
 	session, err := createGameSession(ctx, tok.AccessToken, uuid)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	return &SessionTokens{
 		SessionToken:  session.SessionToken,
 		IdentityToken: session.IdentityToken,
-	}, nil
+	}, newRefresh, nil
 }
 
 func getProfiles(ctx context.Context, accessToken string) ([]struct{ UUID, Username string }, error) {

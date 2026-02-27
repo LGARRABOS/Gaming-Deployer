@@ -147,7 +147,7 @@ const AppRoutes: React.FC = () => {
         path="/deployments"
         element={
           <Layout>
-            <DeploymentsListPage />
+            <DeploymentsListPage game="minecraft" />
           </Layout>
         }
       />

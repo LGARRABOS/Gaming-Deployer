@@ -481,9 +481,18 @@ func ProcessHytaleJob(ctx context.Context, db Store, j *Job, cfg *config.Proxmox
 		return fmt.Errorf("Hytale OAuth not configured: authenticate at /hytale/auth first")
 	}
 
-	tokens, err := hytale.RefreshAndCreateSession(ctx, creds.RefreshToken, creds.ProfileUUID)
+	tokens, newRefresh, err := hytale.RefreshAndCreateSession(ctx, creds.RefreshToken, creds.ProfileUUID)
 	if err != nil {
 		return fmt.Errorf("Hytale session tokens: %w", err)
+	}
+
+	// If the refresh token was rotated, persist the new value so that future
+	// deployments don't try to reuse an invalidated token.
+	if newRefresh != "" && newRefresh != creds.RefreshToken {
+		_ = config.SaveHytaleOAuth(ctx, db, config.HytaleOAuthCredentials{
+			RefreshToken: newRefresh,
+			ProfileUUID:  creds.ProfileUUID,
+		})
 	}
 
 	c, err := proxmox.NewClient(cfg.APIURL, cfg.APITokenID, cfg.APITokenSecret)
