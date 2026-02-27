@@ -23,18 +23,21 @@ const (
 
 // DeviceAuthResponse is the response from the device authorization endpoint.
 type DeviceAuthResponse struct {
-	DeviceCode      string `json:"device_code"`
-	UserCode        string `json:"user_code"`
-	VerificationURI string `json:"verification_uri"`
-	ExpiresIn       int    `json:"expires_in"`
-	Interval        int    `json:"interval"`
+	DeviceCode               string `json:"device_code"`
+	UserCode                 string `json:"user_code"`
+	VerificationURI          string `json:"verification_uri"`
+	VerificationURIComplete  string `json:"verification_uri_complete"`
+	ExpiresIn                int    `json:"expires_in"`
+	Interval                 int    `json:"interval"`
 }
 
-// TokenResponse is the OAuth token response.
+// TokenResponse is the OAuth token response (device code + refresh flows).
 type TokenResponse struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 	ExpiresIn    int    `json:"expires_in"`
+	TokenType    string `json:"token_type"`
+	Scope        string `json:"scope"`
 }
 
 // ProfilesResponse is the response from get-profiles.
@@ -61,8 +64,9 @@ type SessionTokens struct {
 // DeviceAuthResult holds the result of StartDeviceAuth for the client to display and poll.
 type DeviceAuthResult struct {
 	VerificationURL string
-	UserCode       string
-	DeviceCode     string // used by PollForToken
+	UserCode        string
+	DeviceCode      string // used by PollForToken
+	Interval        int    // seconds to wait between polls (RFC 8628)
 }
 
 // StartDeviceAuth initiates the OAuth device code flow.
@@ -94,14 +98,22 @@ func StartDeviceAuth(ctx context.Context) (*DeviceAuthResult, error) {
 		return nil, err
 	}
 
-	verificationURL := dev.VerificationURI
-	if dev.VerificationURI != "" && dev.UserCode != "" {
+	verificationURL := dev.VerificationURIComplete
+	if verificationURL == "" && dev.VerificationURI != "" && dev.UserCode != "" {
 		verificationURL = dev.VerificationURI + "?user_code=" + dev.UserCode
+	}
+	if verificationURL == "" {
+		verificationURL = dev.VerificationURI
+	}
+	interval := dev.Interval
+	if interval <= 0 {
+		interval = 5 // RFC 8628 default
 	}
 	return &DeviceAuthResult{
 		VerificationURL: verificationURL,
 		UserCode:        dev.UserCode,
 		DeviceCode:      dev.DeviceCode,
+		Interval:        interval,
 	}, nil
 }
 
@@ -143,6 +155,13 @@ func PollForTokenOnce(ctx context.Context, deviceCode string) (refreshToken stri
 		}
 		if tok.RefreshToken != "" {
 			return tok.RefreshToken, nil
+		}
+		// Fallback: some implementations return refresh_token in different format
+		var raw map[string]any
+		if json.Unmarshal(body, &raw) == nil {
+			if r, ok := raw["refresh_token"].(string); ok && r != "" {
+				return r, nil
+			}
 		}
 	}
 

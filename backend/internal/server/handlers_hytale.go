@@ -28,6 +28,7 @@ func (s *Server) handleHytaleAuthDevice(w http.ResponseWriter, r *http.Request) 
 		"verification_url": result.VerificationURL,
 		"user_code":        result.UserCode,
 		"device_code":      result.DeviceCode,
+		"interval":         result.Interval,
 	})
 }
 

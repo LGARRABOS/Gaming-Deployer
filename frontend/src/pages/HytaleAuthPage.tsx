@@ -5,6 +5,7 @@ interface DeviceAuthResult {
   verification_url: string;
   user_code: string;
   device_code: string;
+  interval?: number; // seconds between polls (RFC 8628)
 }
 
 type AuthStatus = "idle" | "device_started" | "polling" | "success" | "error";
@@ -14,6 +15,7 @@ export const HytaleAuthPage: React.FC = () => {
   const [verificationUrl, setVerificationUrl] = useState("");
   const [userCode, setUserCode] = useState("");
   const [deviceCode, setDeviceCode] = useState("");
+  const [pollIntervalMs, setPollIntervalMs] = useState(5000);
   const [error, setError] = useState<string | null>(null);
   const [configured, setConfigured] = useState<boolean | null>(null);
 
@@ -35,6 +37,7 @@ export const HytaleAuthPage: React.FC = () => {
       setVerificationUrl(res.verification_url);
       setUserCode(res.user_code);
       setDeviceCode(res.device_code);
+      setPollIntervalMs(Math.max(3000, (res.interval ?? 5) * 1000));
       setStatus("polling");
     } catch (e: unknown) {
       setError((e as Error).message ?? "Erreur au démarrage de l'authentification");
@@ -44,6 +47,8 @@ export const HytaleAuthPage: React.FC = () => {
 
   useEffect(() => {
     if (status !== "polling" || !deviceCode) return;
+
+    let intervalId: ReturnType<typeof setInterval> | null = null;
 
     const poll = async () => {
       try {
@@ -56,7 +61,6 @@ export const HytaleAuthPage: React.FC = () => {
           return;
         }
         if (res.status === "pending") {
-          // Continue polling
           return;
         }
       } catch (e: unknown) {
@@ -66,11 +70,14 @@ export const HytaleAuthPage: React.FC = () => {
       }
     };
 
-    const interval = setInterval(poll, 5000);
+    // Premier poll immédiat, puis tous les interval secondes (RFC 8628)
     poll();
+    intervalId = setInterval(poll, pollIntervalMs);
 
-    return () => clearInterval(interval);
-  }, [status, deviceCode, checkStatus]);
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [status, deviceCode, pollIntervalMs, checkStatus]);
 
   const handleLogout = async () => {
     setError(null);
