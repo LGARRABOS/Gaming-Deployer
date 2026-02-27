@@ -1,0 +1,12 @@
+# Données locales et base de données
+data/
+backend/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Variables d'environnement (secrets locaux)
+.env
+.env.local
+*.local

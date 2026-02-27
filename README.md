@@ -97,14 +97,12 @@ git push origin main
 On the Ubuntu VM running Proxmox Game Deployer:
 
 ```bash
-pgdctl update
+pgdctl update          # pull main + build + restart
+pgdctl update --test   # pull feature/navbar-multi-jeux + build + restart (tests en conditions réelles)
 ```
 
-This command:
-
-- updates the Git repository on `main`,
-- rebuilds frontend + backend,
-- restarts the application systemd service.
+- `pgdctl update` : met à jour depuis `main`, rebuild et redémarre.
+- `pgdctl update --test` : met à jour depuis la branche de test `feature/navbar-multi-jeux` pour tester en conditions réelles avant merge.
 
 ---
 

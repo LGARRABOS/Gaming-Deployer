@@ -13,6 +13,8 @@ import { ServerDashboardPage } from "./pages/ServerDashboardPage";
 import { useAppStatus } from "./hooks/useAppStatus";
 import { SettingsPage } from "./pages/SettingsPage";
 import { UsersPage } from "./pages/UsersPage";
+import { AdminPage } from "./pages/AdminPage";
+import { PlaceholderGamePage } from "./pages/PlaceholderGamePage";
 
 const AppRoutes: React.FC = () => {
   const location = useLocation();
@@ -60,7 +62,15 @@ const AppRoutes: React.FC = () => {
         }
       />
       <Route
-        path="/users"
+        path="/admin"
+        element={
+          <Layout>
+            <AdminPage />
+          </Layout>
+        }
+      />
+      <Route
+        path="/admin/users"
         element={
           <Layout>
             <UsersPage />
@@ -68,10 +78,18 @@ const AppRoutes: React.FC = () => {
         }
       />
       <Route
-        path="/settings"
+        path="/admin/settings"
         element={
           <Layout>
             <SettingsPage />
+          </Layout>
+        }
+      />
+      <Route
+        path="/games/placeholder"
+        element={
+          <Layout>
+            <PlaceholderGamePage />
           </Layout>
         }
       />
@@ -107,6 +125,8 @@ const AppRoutes: React.FC = () => {
           </Layout>
         }
       />
+      <Route path="/users" element={<Navigate to="/admin/users" replace />} />
+      <Route path="/settings" element={<Navigate to="/admin/settings" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

@@ -32,11 +32,22 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const canSeeDeployments = role === "owner" || role === "admin";
   const canSeeSettings = role === "owner";
   const canSeeUsers = role === "owner" || role === "admin";
+  const canSeeAdmin = canSeeUsers || canSeeSettings;
+
+  const isMinecraftSection =
+    location.pathname.startsWith("/deployments") || location.pathname.startsWith("/servers");
+  const isAdminSection = location.pathname.startsWith("/admin");
+  const isPlaceholderSection = location.pathname.startsWith("/games/placeholder");
 
   // Utilisateur : accès uniquement à la page Serveurs Minecraft
   if (!userLoading && role === "user") {
     const p = location.pathname;
-    if (p === "/" || p.startsWith("/deployments") || p === "/settings" || p.startsWith("/users")) {
+    if (
+      p === "/" ||
+      p.startsWith("/deployments") ||
+      p.startsWith("/admin") ||
+      p.startsWith("/games")
+    ) {
       navigate(p === "/" ? "/servers" : "/servers", { replace: true });
       return null;
     }
@@ -56,75 +67,142 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     );
   }
 
+  const getBreadcrumb = () => {
+    if (location.pathname.startsWith("/deployments/new")) return "Créer un serveur Minecraft";
+    if (location.pathname.startsWith("/deployments/") && location.pathname !== "/deployments")
+      return "Détail d'un déploiement";
+    if (location.pathname.startsWith("/servers/") && location.pathname !== "/servers")
+      return "Tableau de bord serveur";
+    if (location.pathname === "/servers") return "Serveurs Minecraft";
+    if (location.pathname === "/deployments") return "Déploiements";
+    if (location.pathname === "/admin") return "Administration";
+    if (location.pathname.startsWith("/admin/users")) return "Utilisateurs";
+    if (location.pathname.startsWith("/admin/settings")) return "Paramètres";
+    if (location.pathname.startsWith("/games/placeholder")) return "Bientôt disponible";
+    return "Dashboard";
+  };
+
   return (
     <div className="app-root">
-      <div className="app-shell">
-        <aside className="sidebar">
-          <div className="sidebar-header">
-            <div className="app-brand">Proxmox Game Deployer</div>
-            <p className="app-subtitle">Dashboard jeux &amp; VMs</p>
-          </div>
-          <nav className="sidebar-nav">
-            {canSeeDeployments && (
-              <>
-                <Link
-                  to="/deployments"
-                  className={isDeploymentsActive ? "sidebar-link sidebar-link--active" : "sidebar-link"}
-                >
-                  Déploiements
-                </Link>
-                <Link
-                  to="/deployments/new/minecraft"
-                  className={isActive("/deployments/new/minecraft") ? "sidebar-link sidebar-link--active" : "sidebar-link"}
-                >
-                  Nouveau serveur Minecraft
-                </Link>
-              </>
-            )}
+      <header className="navbar">
+        <div className="navbar-brand">
+          <span className="app-brand">Proxmox Game Deployer</span>
+          <span className="app-subtitle navbar-subtitle">Dashboard jeux &amp; VMs</span>
+        </div>
+        <nav className="navbar-nav">
+          <Link
+            to="/servers"
+            className={
+              isMinecraftSection ? "navbar-link navbar-link--active" : "navbar-link"
+            }
+          >
+            Minecraft
+          </Link>
+          <Link
+            to="/games/placeholder"
+            className={
+              isPlaceholderSection ? "navbar-link navbar-link--active" : "navbar-link"
+            }
+          >
+            Autre jeu
+          </Link>
+          {canSeeAdmin && (
             <Link
-              to="/servers"
-              className={isActive("/servers") ? "sidebar-link sidebar-link--active" : "sidebar-link"}
+              to="/admin"
+              className={isAdminSection ? "navbar-link navbar-link--active" : "navbar-link"}
             >
-              Serveurs Minecraft
+              Admin
             </Link>
-            {canSeeUsers && (
-              <Link
-                to="/users"
-                className={isActive("/users") ? "sidebar-link sidebar-link--active" : "sidebar-link"}
-              >
-                Utilisateurs
-              </Link>
-            )}
-            {canSeeSettings && (
-              <Link
-                to="/settings"
-                className={isActive("/settings") ? "sidebar-link sidebar-link--active" : "sidebar-link"}
-              >
-                Paramètres
-              </Link>
-            )}
-          </nav>
-          <button className="sidebar-logout" onClick={onLogout}>
+          )}
+          <button className="navbar-logout" onClick={onLogout}>
             Déconnexion
           </button>
-        </aside>
+        </nav>
+      </header>
+      <div className="app-shell">
+        {(isMinecraftSection || isAdminSection) && (
+          <aside className="sidebar">
+            <nav className="sidebar-nav">
+              {isMinecraftSection && (
+                <>
+                  {canSeeDeployments && (
+                    <>
+                      <Link
+                        to="/deployments"
+                        className={
+                          isDeploymentsActive
+                            ? "sidebar-link sidebar-link--active"
+                            : "sidebar-link"
+                        }
+                      >
+                        Déploiements
+                      </Link>
+                      <Link
+                        to="/deployments/new/minecraft"
+                        className={
+                          isActive("/deployments/new/minecraft")
+                            ? "sidebar-link sidebar-link--active"
+                            : "sidebar-link"
+                        }
+                      >
+                        Nouveau serveur Minecraft
+                      </Link>
+                    </>
+                  )}
+                  <Link
+                    to="/servers"
+                    className={
+                      isActive("/servers") ? "sidebar-link sidebar-link--active" : "sidebar-link"
+                    }
+                  >
+                    Serveurs Minecraft
+                  </Link>
+                </>
+              )}
+              {isAdminSection && canSeeAdmin && (
+                <>
+                  <Link
+                    to="/admin"
+                    className={
+                      location.pathname === "/admin"
+                        ? "sidebar-link sidebar-link--active"
+                        : "sidebar-link"
+                    }
+                  >
+                    Vue d&apos;ensemble
+                  </Link>
+                  {canSeeUsers && (
+                    <Link
+                      to="/admin/users"
+                      className={
+                        isActive("/admin/users")
+                          ? "sidebar-link sidebar-link--active"
+                          : "sidebar-link"
+                      }
+                    >
+                      Utilisateurs
+                    </Link>
+                  )}
+                  {canSeeSettings && (
+                    <Link
+                      to="/admin/settings"
+                      className={
+                        isActive("/admin/settings")
+                          ? "sidebar-link sidebar-link--active"
+                          : "sidebar-link"
+                      }
+                    >
+                      Paramètres
+                    </Link>
+                  )}
+                </>
+              )}
+            </nav>
+          </aside>
+        )}
         <div className="main-layout">
           <header className="main-header">
-            <span className="main-breadcrumb">
-              {location.pathname.startsWith("/deployments/new")
-                ? "Créer un serveur Minecraft"
-                : location.pathname.startsWith("/deployments/") && location.pathname !== "/deployments"
-                ? "Détail d’un déploiement"
-                : location.pathname.startsWith("/servers/") && location.pathname !== "/servers"
-                ? "Tableau de bord serveur"
-                : location.pathname === "/servers"
-                ? "Serveurs Minecraft"
-                : location.pathname.startsWith("/users")
-                ? "Utilisateurs"
-                : location.pathname === "/settings"
-                ? "Paramètres"
-                : "Déploiements"}
-            </span>
+            <span className="main-breadcrumb">{getBreadcrumb()}</span>
           </header>
           <main className="app-main">{children}</main>
         </div>
@@ -132,4 +210,3 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     </div>
   );
 };
-

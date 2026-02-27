@@ -277,7 +277,8 @@ git push origin main
 On the Ubuntu VM:
 
 ```bash
-pgdctl update
+pgdctl update          # Met à jour depuis main
+pgdctl update --test   # Met à jour depuis la branche de test (feature/navbar-multi-jeux) pour tester en conditions réelles
 ```
 
 ### 9.2 Quick rollback
