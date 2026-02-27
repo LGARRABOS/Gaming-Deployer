@@ -80,6 +80,8 @@ case "$cmd" in
       echo "==> No update available (already up to date with origin/$BRANCH)."
       exit 0
     fi
+    # Discard local changes (e.g. backend/web/dist from previous build) so checkout succeeds
+    git restore . 2>/dev/null || git checkout -- . 2>/dev/null || true
     git checkout -B "$BRANCH" "origin/$BRANCH"
     echo "    Git repository updated."
     echo ""
