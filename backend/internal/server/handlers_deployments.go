@@ -90,9 +90,9 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 	query := `
 		SELECT id, game, type, status, vmid, ip_address, created_at, updated_at
 		FROM deployments
-		WHERE status != 'deleting'
+		WHERE status != ?
 	`
-	args := []any{}
+	args := []any{string(deploy.StatusDeleting)}
 	if game == "minecraft" || game == "hytale" {
 		query += ` AND game = ?`
 		args = append(args, game)
@@ -271,10 +271,9 @@ func (s *Server) handleGetDeploymentLogs(w http.ResponseWriter, r *http.Request)
 // Helper to avoid unused import errors for auth in this file.
 var _ = auth.User{}
 
-// handleDeleteDeployment cancels a deployment and attempts to destroy its VM, then
-// marks the deployment as cancelled. Jobs associated with the deployment are
-// moved to "cancelled" as well. This is a best-effort operation: failures when
-// talking to Proxmox are reported but do not prevent local cancellation.
+// handleDeleteDeployment cancels a deployment and attempts to destroy its VM.
+// If a VM exists, deletion runs asynchronously (returns 202). Otherwise returns 204.
+// The deployment is always removed from the DB eventually, even if Proxmox fails.
 func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
@@ -314,67 +313,46 @@ func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) 
 		WHERE deployment_id = ? AND status IN ('queued', 'running')
 	`, string(deploy.JobCancelled), now, deploymentID)
 
-	if !vmid.Valid {
-		// No VM: delete immediately (fast).
-		_, _ = s.DB.Sql().ExecContext(ctx, `DELETE FROM deployments WHERE id = ?`, deploymentID)
-		w.WriteHeader(http.StatusNoContent)
+	if vmid.Valid {
+		// VM exists: mark as deleting and run destruction in background.
+		_, _ = s.DB.Sql().ExecContext(ctx, `
+			UPDATE deployments SET status = ?, updated_at = ? WHERE id = ?
+		`, string(deploy.StatusDeleting), now, deploymentID)
+
+		// Run VM destruction in background; always delete from DB when done.
+		go func(depID int64, vmID int64, reqJSON string) {
+			s.deleteVMAndDeployment(context.Background(), depID, vmID, reqJSON)
+		}(deploymentID, vmid.Int64, reqJSON)
+
+		w.WriteHeader(http.StatusAccepted)
 		return
 	}
 
-	// VM exists: run Proxmox stop+delete in background to avoid HTTP timeout.
-	_, _ = s.DB.Sql().ExecContext(ctx, `
-		UPDATE deployments SET status = ?, updated_at = ? WHERE id = ?
-	`, "deleting", now, deploymentID)
-
-	go s.deleteDeploymentAsync(deploymentID, vmid.Int64, reqJSON)
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusAccepted)
-	_, _ = w.Write([]byte(`{"status":"deleting","message":"Suppression en cours. La VM sera supprimée en arrière-plan."}`))
+	// No VM: delete from DB immediately.
+	_, _ = s.DB.Sql().ExecContext(ctx, `DELETE FROM deployments WHERE id = ?`, deploymentID)
+	w.WriteHeader(http.StatusNoContent)
 }
 
-// deleteDeploymentAsync runs in background: stops VM, deletes VM on Proxmox, then removes deployment from DB.
-func (s *Server) deleteDeploymentAsync(deploymentID int64, vmid int64, reqJSON string) {
-	ctx := context.Background()
-
+func (s *Server) deleteVMAndDeployment(ctx context.Context, deploymentID int64, vmid int64, reqJSON string) {
 	cfg, err := config.LoadProxmoxConfig(ctx, s.DB)
 	if err != nil {
-		s.finishAsyncDelete(deploymentID)
+		_, _ = s.DB.Sql().ExecContext(ctx, `DELETE FROM deployments WHERE id = ?`, deploymentID)
 		return
 	}
 	cl, err := proxmox.NewClient(cfg.APIURL, cfg.APITokenID, cfg.APITokenSecret)
 	if err != nil {
-		s.finishAsyncDelete(deploymentID)
+		_, _ = s.DB.Sql().ExecContext(ctx, `DELETE FROM deployments WHERE id = ?`, deploymentID)
 		return
 	}
-	var req struct {
-		Node string `json:"node"`
-	}
-	if err := json.Unmarshal([]byte(reqJSON), &req); err != nil {
-		s.finishAsyncDelete(deploymentID)
-		return
-	}
+	var req struct { Node string `json:"node"` }
+	_ = json.Unmarshal([]byte(reqJSON), &req)
 	node := req.Node
 	if node == "" {
 		node = cfg.DefaultNode
 	}
-
-	// Tenter d'arrêter et supprimer la VM sur Proxmox (best-effort).
-	if upid, err := cl.StopVM(ctx, node, int(vmid)); err == nil {
-		_ = cl.WaitForTask(ctx, node, upid, 5*time.Minute)
-	}
-	if upid, err := cl.DeleteVM(ctx, node, int(vmid)); err == nil {
-		_ = cl.WaitForTask(ctx, node, upid, 10*time.Minute)
-	}
-
-	// Toujours supprimer le déploiement de la DB pour qu'il disparaisse de l'interface.
-	// Si la VM n'a pas pu être supprimée sur Proxmox, elle peut rester orpheline (nettoyage manuel si besoin).
+	_, _ = cl.StopVM(ctx, node, int(vmid))
+	_, _ = cl.DeleteVM(ctx, node, int(vmid))
 	_, _ = s.DB.Sql().ExecContext(ctx, `DELETE FROM deployments WHERE id = ?`, deploymentID)
-}
-
-func (s *Server) finishAsyncDelete(deploymentID int64) {
-	// En cas d'erreur (config, client), on supprime quand même le déploiement pour qu'il disparaisse.
-	_, _ = s.DB.Sql().ExecContext(context.Background(), `DELETE FROM deployments WHERE id = ?`, deploymentID)
 }
 
 type assignDeploymentRequest struct {

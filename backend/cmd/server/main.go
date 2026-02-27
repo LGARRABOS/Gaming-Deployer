@@ -55,6 +55,9 @@ func main() {
 	}()
 
 	log.Printf("server started on %s", addr)
+	if os.Getenv("DRY_RUN") == "true" {
+		log.Printf("WARNING: DRY_RUN=true — les déploiements échoueront. Mettez DRY_RUN=false pour activer les déploiements.")
+	}
 	log.Printf("config: APP_NET_CIDR=%q APP_NET_GATEWAY=%q", os.Getenv("APP_NET_CIDR"), os.Getenv("APP_NET_GATEWAY"))
 
 	sigCh := make(chan os.Signal, 1)

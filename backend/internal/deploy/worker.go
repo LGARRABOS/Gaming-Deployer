@@ -149,7 +149,6 @@ func (w *Worker) processNextJob(ctx context.Context) error {
 	return err
 }
 
-// markJobAndDeploymentFailed updates both the job and the deployment with failed status and error message.
 func markJobAndDeploymentFailed(ctx context.Context, db Store, job *Job, err error) {
 	if job.DeploymentID == nil {
 		return

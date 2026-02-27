@@ -61,6 +61,10 @@ export async function apiDelete(path: string): Promise<void> {
   if (ct.includes("application/json") && res.body) {
     await res.json();
   }
+  // Consume body for 202 Accepted to avoid "unread response body" warnings
+  if (res.ok && res.status !== 204 && res.body) {
+    await res.text();
+  }
 }
 
 /** PUT raw body (e.g. file content). Returns JSON if present. */

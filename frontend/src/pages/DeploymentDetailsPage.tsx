@@ -174,7 +174,6 @@ export const DeploymentDetailsPage: React.FC = () => {
     setDeleteError(null);
     try {
       await apiDelete(`/api/deployments/${deploymentId}`);
-      // Navigation avec state pour retirer optimistiquement le déploiement de la liste
       const listPath = deployment?.game === "hytale" ? "/hytale/deployments" : "/deployments";
       navigate(listPath, { state: { deletedId: deploymentId }, replace: true });
     } catch (e: unknown) {

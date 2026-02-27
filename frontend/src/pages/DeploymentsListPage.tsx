@@ -36,13 +36,7 @@ export const DeploymentsListPage: React.FC<DeploymentsListPageProps> = ({ game }
     const url = game ? `/api/deployments?game=${game}` : "/api/deployments";
     apiGet<DeploymentListItem[] | null>(url)
       .then((data) => {
-        if (!cancelled) {
-          let list = Array.isArray(data) ? data : [];
-          if (deletedId != null) {
-            list = list.filter((d) => d.id !== deletedId);
-          }
-          setItems(list);
-        }
+        if (!cancelled) setItems(Array.isArray(data) ? data : []);
       })
       .catch((e: unknown) => {
         if (!cancelled) setError((e as Error).message ?? "Erreur chargement déploiements");
@@ -51,7 +45,7 @@ export const DeploymentsListPage: React.FC<DeploymentsListPageProps> = ({ game }
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [game, deletedId]);
+  }, [game]);
 
   if (loading) {
     return (
@@ -68,7 +62,7 @@ export const DeploymentsListPage: React.FC<DeploymentsListPageProps> = ({ game }
     );
   }
 
-  const list = items ?? [];
+  const list = (items ?? []).filter((d) => d.id !== deletedId);
   const isHytale = game === "hytale";
   const gameLabel = isHytale ? "Hytale" : "Minecraft";
   const newServerPath = isHytale ? "/deployments/new/hytale" : "/deployments/new/minecraft";
