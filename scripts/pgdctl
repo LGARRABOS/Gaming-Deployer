@@ -3,10 +3,11 @@ set -euo pipefail
 
 # Si on exécute la copie installée (/usr/local/bin), toujours exécuter la version du repo.
 # Ainsi, la branche checkée-out dans le repo détermine quelle version de pgdctl s'exécute.
+# On utilise bash explicitement pour éviter les problèmes de permission d'exécution sur le fichier.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_PGDCTL="/opt/proxmox-game-deployer/scripts/pgdctl"
 if [[ -f "$APP_PGDCTL" && ! -d "$SCRIPT_DIR/../.git" ]]; then
-  exec "$APP_PGDCTL" "$@"
+  exec bash "$APP_PGDCTL" "$@"
 fi
 
 DEFAULT_REPO_DIR="/opt/proxmox-game-deployer"

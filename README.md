@@ -102,7 +102,9 @@ pgdctl update --test   # pull feature/navbar-multi-jeux + build + restart (tests
 ```
 
 - `pgdctl update` : met à jour depuis `main`, rebuild et redémarre.
-- `pgdctl update --test` : met à jour depuis la branche de test `feature/navbar-multi-jeux` pour tester en conditions réelles avant merge.
+- `pgdctl update --test` : met à jour depuis la branche de test `feature/navbar-multi-jeux` pour tester en conditions réelles.
+
+**Première utilisation de `--test`** : si vous avez une ancienne installation, exécutez d’abord `pgdctl update` (sans option) pour récupérer la nouvelle version de pgdctl, puis `pgdctl update --test`.
 
 ---
 
