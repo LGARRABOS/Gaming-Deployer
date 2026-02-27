@@ -6,6 +6,8 @@ import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { CreateMinecraftServerPage } from "./pages/CreateMinecraftServerPage";
+import { CreateHytaleServerPage } from "./pages/CreateHytaleServerPage";
+import { HytaleAuthPage } from "./pages/HytaleAuthPage";
 import { DeploymentsListPage } from "./pages/DeploymentsListPage";
 import { DeploymentDetailsPage } from "./pages/DeploymentDetailsPage";
 import { ServersListPage } from "./pages/ServersListPage";
@@ -62,6 +64,22 @@ const AppRoutes: React.FC = () => {
         }
       />
       <Route
+        path="/deployments/new/hytale"
+        element={
+          <Layout>
+            <CreateHytaleServerPage />
+          </Layout>
+        }
+      />
+      <Route
+        path="/hytale/auth"
+        element={
+          <Layout>
+            <HytaleAuthPage />
+          </Layout>
+        }
+      />
+      <Route
         path="/admin"
         element={
           <Layout>
@@ -82,6 +100,30 @@ const AppRoutes: React.FC = () => {
         element={
           <Layout>
             <SettingsPage />
+          </Layout>
+        }
+      />
+      <Route
+        path="/hytale/servers"
+        element={
+          <Layout>
+            <ServersListPage game="hytale" />
+          </Layout>
+        }
+      />
+      <Route
+        path="/hytale/servers/:id"
+        element={
+          <Layout>
+            <ServerDashboardPage />
+          </Layout>
+        }
+      />
+      <Route
+        path="/hytale/deployments"
+        element={
+          <Layout>
+            <DeploymentsListPage game="hytale" />
           </Layout>
         }
       />

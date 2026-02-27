@@ -1,0 +1,26 @@
+---
+- name: Provision Hytale server
+  hosts: all
+  become: true
+  vars:
+    hytale_user: "{{ hytale_admin_user | default('hytale') }}"
+    hytale_dir: "{{ ('/home/' + hytale_admin_user + '/hytale') if hytale_admin_user is defined else '/opt/hytale' }}"
+    hytale_service_name: hytale
+    hytale_port: "{{ hytale_port | default(5520) }}"
+    hytale_max_players: "{{ hytale_max_players | default(20) }}"
+    hytale_jvm_heap: "{{ hytale_jvm_heap | default('2G') }}"
+    hytale_jvm_flags: "{{ hytale_jvm_flags | default('') }}"
+
+  tasks:
+    - import_tasks: tasks/hytale_base.yml
+    - import_tasks: tasks/hytale_downloader.yml
+    - import_tasks: tasks/hytale_systemd.yml
+
+  handlers:
+    - name: Restart sshd
+      service:
+        name: "{{ 'ssh' if ansible_os_family == 'Debian' else 'sshd' }}"
+        state: restarted
+    - name: Reload Hytale systemd
+      systemd:
+        daemon_reload: true

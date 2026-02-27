@@ -21,6 +21,9 @@ const AppConfigKey = "app_initialized"
 // ProxmoxConfigKey is the settings key for proxmox configuration.
 const ProxmoxConfigKey = "proxmox_config"
 
+// HytaleOAuthKey is the settings key for Hytale OAuth credentials (refresh_token, profile_uuid).
+const HytaleOAuthKey = "hytale_oauth"
+
 // ProxmoxConfig holds the configuration required to talk to Proxmox and to provision VMs.
 type ProxmoxConfig struct {
 	APIURL          string   `json:"api_url"`
@@ -104,5 +107,64 @@ func LoadProxmoxConfig(ctx context.Context, db Store) (*ProxmoxConfig, error) {
 		return nil, err
 	}
 	return &cfg, nil
+}
+
+// HytaleOAuthCredentials holds the stored Hytale OAuth data.
+type HytaleOAuthCredentials struct {
+	RefreshToken string `json:"refresh_token"`
+	ProfileUUID  string `json:"profile_uuid"`
+}
+
+// SaveHytaleOAuth stores Hytale OAuth credentials (encrypted if APP_ENC_KEY is set).
+func SaveHytaleOAuth(ctx context.Context, db Store, creds HytaleOAuthCredentials) error {
+	raw, err := json.Marshal(creds)
+	if err != nil {
+		return err
+	}
+	value := string(raw)
+	if key := os.Getenv("APP_ENC_KEY"); key != "" {
+		enc, err := encrypt(value, key)
+		if err != nil {
+			return err
+		}
+		value = "enc:" + enc
+	}
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO settings (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value
+	`, HytaleOAuthKey, value)
+	return err
+}
+
+// LoadHytaleOAuth loads Hytale OAuth credentials.
+func LoadHytaleOAuth(ctx context.Context, db Store) (*HytaleOAuthCredentials, error) {
+	row := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, HytaleOAuthKey)
+	var v string
+	if err := row.Scan(&v); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if len(v) > 4 && v[:4] == "enc:" {
+		key := os.Getenv("APP_ENC_KEY")
+		if key != "" {
+			dec, err := decrypt(v[4:], key)
+			if err == nil {
+				v = dec
+			}
+		}
+	}
+	var creds HytaleOAuthCredentials
+	if err := json.Unmarshal([]byte(v), &creds); err != nil {
+		return nil, err
+	}
+	return &creds, nil
+}
+
+// DeleteHytaleOAuth removes stored Hytale OAuth credentials.
+func DeleteHytaleOAuth(ctx context.Context, db Store) error {
+	_, err := db.ExecContext(ctx, `DELETE FROM settings WHERE key = ?`, HytaleOAuthKey)
+	return err
 }
 

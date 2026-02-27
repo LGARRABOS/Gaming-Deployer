@@ -1,0 +1,45 @@
+# Create directory for drop-in
+- name: Ensure systemd drop-in directory exists
+  file:
+    path: /etc/systemd/system/{{ hytale_service_name }}.service.d
+    state: directory
+    mode: "0755"
+
+# Tokens in Environment= (drop-in) to avoid special char escaping in ExecStart
+- name: Create systemd drop-in for Hytale tokens
+  copy:
+    dest: /etc/systemd/system/{{ hytale_service_name }}.service.d/tokens.conf
+    mode: "0600"
+    content: |
+      [Service]
+      Environment=HYTALE_SESSION_TOKEN={{ hytale_session_token }}
+      Environment=HYTALE_IDENTITY_TOKEN={{ hytale_identity_token }}
+
+- name: Create systemd service for Hytale
+  copy:
+    dest: /etc/systemd/system/{{ hytale_service_name }}.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Hytale Server
+      After=network.target
+
+      [Service]
+      WorkingDirectory={{ hytale_dir }}
+      User={{ hytale_user }}
+      Group={{ hytale_user }}
+      Restart=always
+      ExecStart=/bin/sh -c 'exec /usr/bin/java -Xmx{{ hytale_jvm_heap }} {{ hytale_jvm_flags }} -jar HytaleServer.jar --session-token "$$HYTALE_SESSION_TOKEN" --identity-token "$$HYTALE_IDENTITY_TOKEN"'
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Reload systemd
+  systemd:
+    daemon_reload: true
+
+- name: Enable and start Hytale service
+  systemd:
+    name: "{{ hytale_service_name }}"
+    enabled: true
+    state: started

@@ -12,7 +12,11 @@ interface ServerItem {
   created_at: string;
 }
 
-export const ServersListPage: React.FC = () => {
+interface ServersListPageProps {
+  game?: "minecraft" | "hytale";
+}
+
+export const ServersListPage: React.FC<ServersListPageProps> = ({ game = "minecraft" }) => {
   const { user } = useCurrentUser();
   const [servers, setServers] = useState<ServerItem[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -22,7 +26,8 @@ export const ServersListPage: React.FC = () => {
     let cancelled = false;
     const load = async () => {
       try {
-        const data = await apiGet<ServerItem[]>("/api/servers");
+        const url = game ? `/api/servers?game=${game}` : "/api/servers";
+        const data = await apiGet<ServerItem[]>(url);
         if (!cancelled) setServers(data ?? []);
       } catch (e: unknown) {
         if (!cancelled) setError((e as Error).message ?? "Erreur chargement serveurs");
@@ -32,7 +37,7 @@ export const ServersListPage: React.FC = () => {
     };
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [game]);
 
   if (loading) {
     return (
@@ -51,10 +56,14 @@ export const ServersListPage: React.FC = () => {
 
   const list = servers ?? [];
 
+  const isHytale = game === "hytale";
+  const gameLabel = isHytale ? "Hytale" : "Minecraft";
+  const newServerPath = isHytale ? "/deployments/new/hytale" : "/deployments/new/minecraft";
+
   return (
     <div className="servers-page">
       <header className="servers-header">
-        <h1>Serveurs Minecraft</h1>
+        <h1>Serveurs {gameLabel}</h1>
         <p className="servers-subtitle">
           Gestion des serveurs déployés : démarrage, arrêt, configuration et accès SFTP.
         </p>
@@ -66,8 +75,8 @@ export const ServersListPage: React.FC = () => {
           <h2>Aucun serveur</h2>
           {user?.role === "owner" || user?.role === "admin" ? (
             <p>
-              Créez un serveur Minecraft depuis la page{" "}
-              <Link to="/deployments/new/minecraft">Nouveau déploiement</Link>.
+              Créez un serveur {gameLabel} depuis la page{" "}
+              <Link to={newServerPath}>Nouveau déploiement</Link>.
             </p>
           ) : (
             <p className="hint">
@@ -80,7 +89,7 @@ export const ServersListPage: React.FC = () => {
         <ul className="servers-grid">
           {list.map((s) => (
             <li key={s.id} className="server-card-wrapper">
-              <Link to={`/servers/${s.id}`} className="server-card">
+              <Link to={isHytale ? `/hytale/servers/${s.id}` : `/servers/${s.id}`} className="server-card">
                 <span className="server-card-name">{s.name}</span>
                 <span className="server-card-meta">Port {s.port}</span>
                 <span className="server-card-date">

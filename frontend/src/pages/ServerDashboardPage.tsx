@@ -15,6 +15,7 @@ interface ServerInfo {
   name: string;
   ip: string;
   port: number;
+  game?: string;
   vmid?: number;
   status: string;
   created_at: string;
@@ -377,21 +378,24 @@ export const ServerDashboardPage: React.FC = () => {
     serviceStatus === "active" ? "En marche" :
     serviceStatus === "inactive" ? "Arrêté" : String(serviceStatus);
 
+  const isHytale = server?.game === "hytale";
   const tabs: { id: TabId; label: string }[] = [
     { id: "console", label: "Console & performances" },
-    { id: "config", label: "Configuration" },
+    ...(isHytale ? [] : [{ id: "config" as TabId, label: "Configuration" }]),
     { id: "backups", label: "Sauvegardes" },
-    { id: "players", label: "Joueurs" },
+    ...(isHytale ? [] : [{ id: "players" as TabId, label: "Joueurs" }]),
     { id: "monitoring", label: "Monitoring" },
     { id: "logs", label: "Logs" },
-    { id: "migration", label: "Migration" },
+    ...(isHytale ? [] : [{ id: "migration" as TabId, label: "Migration" }]),
     { id: "sftp", label: "Connexion SFTP" },
   ];
 
   return (
     <div className="servers-page servers-dashboard">
       <nav className="servers-breadcrumb">
-        <Link to="/servers">Serveurs Minecraft</Link>
+        <Link to={isHytale ? "/hytale/servers" : "/servers"}>
+          {isHytale ? "Serveurs Hytale" : "Serveurs Minecraft"}
+        </Link>
         <span className="servers-breadcrumb-sep">/</span>
         <span>{server.name}</span>
       </nav>
@@ -464,7 +468,7 @@ export const ServerDashboardPage: React.FC = () => {
               </section>
               <ServerMetrics serverId={serverId} />
             </div>
-            <ServerConsole serverId={serverId} />
+            <ServerConsole serverId={serverId} rconEnabled={!isHytale} />
           </>
         )}
 

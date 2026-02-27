@@ -1,0 +1,134 @@
+- name: Wait for dpkg lock to be released (Cloud-Init / unattended-upgrades)
+  when: ansible_os_family == "Debian"
+  shell: |
+    for i in $(seq 1 90); do
+      fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock >/dev/null 2>&1 || exit 0
+      sleep 2
+    done
+    exit 1
+  register: wait_dpkg
+  failed_when: wait_dpkg.rc != 0
+  changed_when: false
+
+- name: Ensure hytale group exists (only when not using admin user)
+  group:
+    name: hytale
+    state: present
+  when: hytale_admin_user is not defined
+
+- name: Ensure APT cache is updated
+  apt:
+    update_cache: true
+  when: ansible_os_family == "Debian"
+
+- name: Install prerequisites for Adoptium repo
+  apt:
+    name:
+      - wget
+      - apt-transport-https
+      - gpg
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Add Eclipse Adoptium GPG key
+  when: ansible_os_family == "Debian"
+  shell: |
+    wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor | tee /etc/apt/trusted.gpg.d/adoptium.gpg > /dev/null
+  args:
+    creates: /etc/apt/trusted.gpg.d/adoptium.gpg
+
+- name: Get distribution codename for Adoptium repo
+  when: ansible_os_family == "Debian"
+  shell: "awk -F= '/^VERSION_CODENAME/{print $2}' /etc/os-release || awk -F= '/^UBUNTU_CODENAME/{print $2}' /etc/os-release || echo bookworm"
+  register: adoptium_codename
+  changed_when: false
+
+- name: Add Eclipse Adoptium apt repository
+  when: ansible_os_family == "Debian"
+  copy:
+    dest: /etc/apt/sources.list.d/adoptium.list
+    content: "deb https://packages.adoptium.net/artifactory/deb {{ adoptium_codename.stdout | trim }} main\n"
+    mode: "0644"
+  register: adoptium_repo
+
+- name: Update apt cache after adding Adoptium repo
+  apt:
+    update_cache: true
+  when: ansible_os_family == "Debian" and adoptium_repo.changed
+
+- name: Install Java 25 runtime (Eclipse Temurin)
+  apt:
+    name: temurin-25-jre
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Create hytale user (only when not using admin user)
+  user:
+    name: hytale
+    shell: /bin/bash
+    create_home: true
+    group: hytale
+  when: hytale_admin_user is not defined
+
+- name: Create SFTP admin user for Hytale (home only, access restricted to home)
+  when:
+    - hytale_admin_user is defined
+    - hytale_admin_password is defined
+  user:
+    name: "{{ hytale_admin_user }}"
+    shell: /bin/bash
+    create_home: true
+    home: "/home/{{ hytale_admin_user }}"
+    password: "{{ hytale_admin_password | password_hash('sha512') }}"
+
+- name: Prepare admin home for SFTP chroot (root must own chroot dir)
+  when: hytale_admin_user is defined
+  file:
+    path: "/home/{{ hytale_admin_user }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create Hytale directory
+  file:
+    path: "{{ hytale_dir }}"
+    state: directory
+    owner: "{{ hytale_user }}"
+    group: "{{ hytale_user }}"
+    mode: "0755"
+
+- name: Enable SSH password authentication (for SFTP admin access)
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PasswordAuthentication\s+'
+    line: 'PasswordAuthentication yes'
+  notify: Restart sshd
+  when: hytale_admin_user is defined
+
+- name: Enable SSH challenge-response (password) for SFTP clients
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?KbdInteractiveAuthentication\s+'
+    line: 'KbdInteractiveAuthentication yes'
+  notify: Restart sshd
+  when: hytale_admin_user is defined
+
+- name: Restrict SFTP to admin home only (chroot)
+  when: hytale_admin_user is defined
+  blockinfile:
+    path: /etc/ssh/sshd_config
+    marker: "# {mark} ANSIBLE MANAGED - hytale admin chroot"
+    block: |
+      Match User {{ hytale_admin_user }}
+        ChrootDirectory /home/{{ hytale_admin_user }}
+        ForceCommand internal-sftp
+        AllowTcpForwarding no
+  notify: Restart sshd
+
+- name: Open firewall port for Hytale (UDP)
+  ufw:
+    rule: allow
+    port: "{{ hytale_port }}"
+    proto: udp
+  when: ansible_facts.services is not defined or 'ufw' in ansible_facts.services

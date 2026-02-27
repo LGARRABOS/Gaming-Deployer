@@ -48,14 +48,55 @@ func (s *Server) handleCreateDeployment(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusAccepted, map[string]any{"deployment_id": id})
 }
 
+// handleValidateHytaleDeployment validates Hytale deployment inputs.
+func (s *Server) handleValidateHytaleDeployment(w http.ResponseWriter, r *http.Request) {
+	var req deploy.HytaleDeploymentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if err := deploy.ValidateHytaleRequest(req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, http.StatusOK, genericOKResponse{OK: true})
+}
+
+// handleCreateHytaleDeployment validates and enqueues a Hytale deployment.
+func (s *Server) handleCreateHytaleDeployment(w http.ResponseWriter, r *http.Request) {
+	var req deploy.HytaleDeploymentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if err := deploy.ValidateHytaleRequest(req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	id, err := deploy.EnqueueHytaleDeployment(r.Context(), s.DB, req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"deployment_id": id})
+}
+
 // handleListDeployments returns a list of deployments.
+// Query param ?game=minecraft|hytale filters by game.
 func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.DB.Sql().QueryContext(r.Context(), `
+	game := r.URL.Query().Get("game")
+	query := `
 		SELECT id, game, type, status, vmid, ip_address, created_at, updated_at
 		FROM deployments
-		ORDER BY created_at DESC
-		LIMIT 100
-	`)
+	`
+	args := []any{}
+	if game == "minecraft" || game == "hytale" {
+		query += ` WHERE game = ?`
+		args = append(args, game)
+	}
+	query += ` ORDER BY created_at DESC LIMIT 100`
+
+	rows, err := s.DB.Sql().QueryContext(r.Context(), query, args...)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -269,7 +310,9 @@ func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) 
 		if err == nil {
 			cl, err := proxmox.NewClient(cfg.APIURL, cfg.APITokenID, cfg.APITokenSecret)
 			if err == nil {
-				var req deploy.MinecraftDeploymentRequest
+				var req struct {
+					Node string `json:"node"`
+				}
 				if err := json.Unmarshal([]byte(reqJSON), &req); err == nil {
 					node := req.Node
 					if node == "" {
@@ -351,12 +394,12 @@ func (s *Server) handleAssignDeployment(w http.ResponseWriter, r *http.Request) 
 	var res sql.Result
 	if req.UserID == nil {
 		res, err = s.DB.Sql().ExecContext(r.Context(), `
-			UPDATE deployments SET assigned_to_user_id = NULL WHERE id = ? AND game = ?
-		`, deploymentID, "minecraft")
+			UPDATE deployments SET assigned_to_user_id = NULL WHERE id = ?
+		`, deploymentID)
 	} else {
 		res, err = s.DB.Sql().ExecContext(r.Context(), `
-			UPDATE deployments SET assigned_to_user_id = ? WHERE id = ? AND game = ?
-		`, *req.UserID, deploymentID, "minecraft")
+			UPDATE deployments SET assigned_to_user_id = ? WHERE id = ?
+		`, *req.UserID, deploymentID)
 	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

@@ -1,0 +1,32 @@
+# Hytale server files must be downloaded via the official Hytale Downloader or
+# decomp-project/hytale-downloader. The downloader requires OAuth credentials.
+# We pass session_token and identity_token to the server at runtime.
+# The server JAR and assets are expected to be present in hytale_dir.
+#
+# Option A: Pre-downloaded template - the Proxmox template VM may already
+#   contain the Hytale server files (downloaded manually or via a prior run).
+#
+# Option B: Use decomp-project/hytale-downloader with -credentials-path
+#   (non-interactive). The backend provides session/identity tokens at deploy
+#   time; we would need to create a credentials file from them.
+#
+# For now we create the directory structure and expect either:
+# - Template already has HytaleServer.jar + assets
+# - Or a manual step: user SSHs in, runs downloader once with device auth
+- name: Ensure Hytale directory exists (already done in hytale_base)
+  file:
+    path: "{{ hytale_dir }}"
+    state: directory
+    owner: "{{ hytale_user }}"
+    group: "{{ hytale_user }}"
+    mode: "0755"
+
+- name: Check if HytaleServer.jar exists
+  stat:
+    path: "{{ hytale_dir }}/HytaleServer.jar"
+  register: hytale_jar_stat
+
+- name: Log Hytale server files status
+  debug:
+    msg: "HytaleServer.jar {{ 'found' if hytale_jar_stat.stat.exists else 'NOT FOUND - ensure server files are present (template or manual download)' }}"
+  when: not hytale_jar_stat.stat.exists

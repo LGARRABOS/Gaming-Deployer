@@ -35,16 +35,17 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const canSeeAdmin = canSeeUsers || canSeeSettings;
 
   const isMinecraftSection =
-    location.pathname.startsWith("/deployments") || location.pathname.startsWith("/servers");
+    (location.pathname.startsWith("/deployments") && !location.pathname.includes("/hytale")) ||
+    (location.pathname.startsWith("/servers") && !location.pathname.startsWith("/hytale"));
+  const isHytaleSection = location.pathname.startsWith("/hytale");
   const isAdminSection = location.pathname.startsWith("/admin");
-  const isPlaceholderSection = location.pathname.startsWith("/games/placeholder");
 
-  // Utilisateur : accès uniquement à la page Serveurs Minecraft
+  // Utilisateur : accès uniquement aux pages Serveurs (Minecraft ou Hytale)
   if (!userLoading && role === "user") {
     const p = location.pathname;
     if (
       p === "/" ||
-      p.startsWith("/deployments") ||
+      (p.startsWith("/deployments") && !p.startsWith("/hytale")) ||
       p.startsWith("/admin") ||
       p.startsWith("/games")
     ) {
@@ -68,7 +69,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   }
 
   const getBreadcrumb = () => {
+    if (location.pathname === "/deployments/new/hytale") return "Créer un serveur Hytale";
     if (location.pathname.startsWith("/deployments/new")) return "Créer un serveur Minecraft";
+    if (location.pathname.startsWith("/hytale/auth")) return "Authentification Hytale";
+    if (location.pathname.startsWith("/hytale/servers/") && location.pathname !== "/hytale/servers")
+      return "Tableau de bord serveur Hytale";
+    if (location.pathname === "/hytale/servers") return "Serveurs Hytale";
+    if (location.pathname === "/hytale/deployments") return "Déploiements Hytale";
     if (location.pathname.startsWith("/deployments/") && location.pathname !== "/deployments")
       return "Détail d'un déploiement";
     if (location.pathname.startsWith("/servers/") && location.pathname !== "/servers")
@@ -99,12 +106,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             Minecraft
           </Link>
           <Link
-            to="/games/placeholder"
+            to="/hytale/servers"
             className={
-              isPlaceholderSection ? "navbar-link navbar-link--active" : "navbar-link"
+              isHytaleSection ? "navbar-link navbar-link--active" : "navbar-link"
             }
           >
-            Autre jeu
+            Hytale
           </Link>
           {canSeeAdmin && (
             <Link
@@ -152,10 +159,60 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   <Link
                     to="/servers"
                     className={
-                      isActive("/servers") ? "sidebar-link sidebar-link--active" : "sidebar-link"
+                      isActive("/servers") && !location.pathname.startsWith("/hytale")
+                        ? "sidebar-link sidebar-link--active"
+                        : "sidebar-link"
                     }
                   >
                     Serveurs Minecraft
+                  </Link>
+                </>
+              )}
+              {isHytaleSection && (
+                <>
+                  {canSeeDeployments && (
+                    <>
+                      <Link
+                        to="/hytale/deployments"
+                        className={
+                          isActive("/hytale/deployments")
+                            ? "sidebar-link sidebar-link--active"
+                            : "sidebar-link"
+                        }
+                      >
+                        Déploiements Hytale
+                      </Link>
+                      <Link
+                        to="/deployments/new/hytale"
+                        className={
+                          isActive("/deployments/new/hytale")
+                            ? "sidebar-link sidebar-link--active"
+                            : "sidebar-link"
+                        }
+                      >
+                        Nouveau serveur Hytale
+                      </Link>
+                      <Link
+                        to="/hytale/auth"
+                        className={
+                          isActive("/hytale/auth")
+                            ? "sidebar-link sidebar-link--active"
+                            : "sidebar-link"
+                        }
+                      >
+                        Auth Hytale
+                      </Link>
+                    </>
+                  )}
+                  <Link
+                    to="/hytale/servers"
+                    className={
+                      isActive("/hytale/servers")
+                        ? "sidebar-link sidebar-link--active"
+                        : "sidebar-link"
+                    }
+                  >
+                    Serveurs Hytale
                   </Link>
                 </>
               )}

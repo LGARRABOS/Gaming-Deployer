@@ -20,14 +20,19 @@ const statusLabel: Record<string, string> = {
   failed: "Échec",
 };
 
-export const DeploymentsListPage: React.FC = () => {
+interface DeploymentsListPageProps {
+  game?: "minecraft" | "hytale";
+}
+
+export const DeploymentsListPage: React.FC<DeploymentsListPageProps> = ({ game }) => {
   const [items, setItems] = useState<DeploymentListItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    apiGet<DeploymentListItem[] | null>("/api/deployments")
+    const url = game ? `/api/deployments?game=${game}` : "/api/deployments";
+    apiGet<DeploymentListItem[] | null>(url)
       .then((data) => {
         if (!cancelled) {
           setItems(Array.isArray(data) ? data : []);
@@ -40,7 +45,7 @@ export const DeploymentsListPage: React.FC = () => {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [game]);
 
   if (loading) {
     return (
@@ -58,11 +63,14 @@ export const DeploymentsListPage: React.FC = () => {
   }
 
   const list = items ?? [];
+  const isHytale = game === "hytale";
+  const gameLabel = isHytale ? "Hytale" : "Minecraft";
+  const newServerPath = isHytale ? "/deployments/new/hytale" : "/deployments/new/minecraft";
 
   return (
     <div className="page-wrap">
       <header className="page-header">
-        <h1>Déploiements</h1>
+        <h1>Déploiements {gameLabel}</h1>
         <p className="page-subtitle">
           Historique des déploiements de serveurs. Clique sur un déploiement pour voir les logs et le statut.
         </p>
@@ -74,7 +82,7 @@ export const DeploymentsListPage: React.FC = () => {
           <h2>Aucun déploiement</h2>
           <p>
             Créez un serveur depuis{" "}
-            <Link to="/deployments/new/minecraft">Nouveau déploiement → Minecraft</Link>.
+            <Link to={newServerPath}>Nouveau déploiement → {gameLabel}</Link>.
           </p>
         </div>
       ) : (

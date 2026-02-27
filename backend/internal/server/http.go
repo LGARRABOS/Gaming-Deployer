@@ -68,6 +68,10 @@ func New(ctx context.Context, dbPath string) (*Server, error) {
 			r.Get("/me", s.withAuth(s.handleMe))
 			r.Get("/minecraft/versions", s.handleMinecraftVersions)
 			r.Get("/servers", s.handleListServers)
+			r.Get("/hytale/auth/status", s.handleHytaleAuthStatus)
+			r.Post("/hytale/auth/device", s.handleHytaleAuthDevice)
+			r.Get("/hytale/auth/poll", s.handleHytaleAuthPoll)
+			r.Delete("/hytale/auth", s.handleHytaleAuthDelete)
 
 			// Paramètres Proxmox / SSH : réservé au propriétaire
 			r.Group(func(r chi.Router) {
@@ -94,6 +98,8 @@ func New(ctx context.Context, dbPath string) (*Server, error) {
 				r.Use(s.requireCanDeploy)
 				r.Post("/deployments/validate", s.handleValidateDeployment)
 				r.Post("/deployments", s.handleCreateDeployment)
+				r.Post("/deployments/hytale/validate", s.handleValidateHytaleDeployment)
+				r.Post("/deployments/hytale", s.handleCreateHytaleDeployment)
 				r.Get("/deployments", s.handleListDeployments)
 				r.Get("/deployments/{id}", s.handleGetDeployment)
 				r.Get("/deployments/{id}/logs", s.handleGetDeploymentLogs)

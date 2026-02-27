@@ -10,3 +10,6 @@ backend/data/
 .env
 .env.local
 *.local
+
+# Binaires compilés
+*.exe

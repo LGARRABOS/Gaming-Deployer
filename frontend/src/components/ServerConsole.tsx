@@ -3,6 +3,8 @@ import { apiPost } from "../api/client";
 
 interface Props {
   serverId: number;
+  /** RCON disabled for Hytale (no RCON support). Hides command input when false. */
+  rconEnabled?: boolean;
 }
 
 interface CommandResult {
@@ -141,7 +143,7 @@ function ConsoleLineContent({ text, forceError }: { text: string; forceError?: b
   );
 }
 
-export const ServerConsole: React.FC<Props> = ({ serverId }) => {
+export const ServerConsole: React.FC<Props> = ({ serverId, rconEnabled = true }) => {
   const [lines, setLines] = useState<ConsoleLine[]>([]);
   const [status, setStatus] = useState<"idle" | "connecting" | "connected" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -235,7 +237,7 @@ export const ServerConsole: React.FC<Props> = ({ serverId }) => {
   return (
     <section className="card server-panel server-panel--wide server-console-panel">
       <div className="server-console-header">
-        <h2 className="server-panel-title">Console du serveur Minecraft</h2>
+        <h2 className="server-panel-title">Console du serveur</h2>
         <div className="server-console-actions">
           <button type="button" className="server-btn server-btn--stop" onClick={clear}>
             Effacer
@@ -263,24 +265,26 @@ export const ServerConsole: React.FC<Props> = ({ serverId }) => {
           );
         })}
       </div>
-      <form className="server-console-input-row" onSubmit={sendCommand}>
-        <input
-          type="text"
-          className="server-console-input"
-          placeholder="Commande console (ex: say Bonjour, stop, list, ...)"
-          value={command}
-          onChange={(e) => setCommand(e.target.value)}
-          disabled={sending}
-          ref={inputRef}
-        />
-        <button
-          type="submit"
-          className="server-btn server-btn--primary"
-          disabled={sending || !command.trim()}
-        >
-          {sending ? "Envoi…" : "Envoyer"}
-        </button>
-      </form>
+      {rconEnabled && (
+        <form className="server-console-input-row" onSubmit={sendCommand}>
+          <input
+            type="text"
+            className="server-console-input"
+            placeholder="Commande console (ex: say Bonjour, stop, list, ...)"
+            value={command}
+            onChange={(e) => setCommand(e.target.value)}
+            disabled={sending}
+            ref={inputRef}
+          />
+          <button
+            type="submit"
+            className="server-btn server-btn--primary"
+            disabled={sending || !command.trim()}
+          >
+            {sending ? "Envoi…" : "Envoyer"}
+          </button>
+        </form>
+      )}
     </section>
   );
 };

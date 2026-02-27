@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/example/proxmox-game-deployer/internal/config"
+	"github.com/example/proxmox-game-deployer/internal/hytale"
 	"github.com/example/proxmox-game-deployer/internal/minecraft"
 	"github.com/example/proxmox-game-deployer/internal/proxmox"
 )
@@ -70,6 +71,26 @@ type MinecraftDeploymentRequest struct {
 	BackupNotes string              `json:"backup_notes,omitempty"`
 }
 
+// HytaleDeploymentRequest is the API-level payload for a Hytale deployment.
+type HytaleDeploymentRequest struct {
+	Name        string         `json:"name"`
+	Node        string         `json:"node"`
+	TemplateVM  int            `json:"template_vmid"`
+	Cores       int            `json:"cores"`
+	MemoryMB    int            `json:"memory_mb"`
+	DiskGB      int            `json:"disk_gb"`
+	Storage     string         `json:"storage"`
+	Bridge      string         `json:"bridge"`
+	VLAN        *int           `json:"vlan,omitempty"`
+	IPAddress   string         `json:"ip_address"`
+	CIDR        int            `json:"cidr"`
+	Gateway     string         `json:"gateway"`
+	DNS         string         `json:"dns"`
+	Hostname    string         `json:"hostname"`
+	Hytale      hytale.Config  `json:"hytale"`
+	BackupNotes string         `json:"backup_notes,omitempty"`
+}
+
 // Job represents an internal job in the queue.
 type Job struct {
 	ID           int64
@@ -108,6 +129,38 @@ func EnqueueMinecraftDeployment(ctx context.Context, db Store, req MinecraftDepl
 			INSERT INTO jobs (type, payload_json, status, deployment_id, run_after, created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
 		`, "deploy_minecraft", string(rawReq), string(JobQueued), deploymentID, now, now, now)
+		return err
+	})
+	if err != nil {
+		return 0, err
+	}
+	return deploymentID, nil
+}
+
+// EnqueueHytaleDeployment inserts a Hytale deployment + job.
+func EnqueueHytaleDeployment(ctx context.Context, db Store, req HytaleDeploymentRequest) (int64, error) {
+	rawReq, err := json.Marshal(req)
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now().UTC()
+	var deploymentID int64
+	err = db.WithTx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `
+			INSERT INTO deployments (game, type, request_json, status, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, "hytale", "hytale", string(rawReq), string(StatusQueued), now, now)
+		if err != nil {
+			return err
+		}
+		deploymentID, err = res.LastInsertId()
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO jobs (type, payload_json, status, deployment_id, run_after, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, "deploy_hytale", string(rawReq), string(JobQueued), deploymentID, now, now, now)
 		return err
 	})
 	if err != nil {
@@ -356,6 +409,256 @@ func ProcessJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig
 	resStr := string(rawResult)
 	updateDeploymentStatus(ctx, db, *deploymentID, StatusSuccess, &vmid, &ip, nil, &resStr)
 	appendLog(ctx, db, *deploymentID, "info", "Deployment completed successfully")
+	return nil
+}
+
+// ProcessHytaleJob runs the deployment pipeline for a Hytale server.
+func ProcessHytaleJob(ctx context.Context, db Store, j *Job, cfg *config.ProxmoxConfig) error {
+	dryRun := os.Getenv("DRY_RUN") == "true"
+
+	var req HytaleDeploymentRequest
+	if err := json.Unmarshal([]byte(j.PayloadJSON), &req); err != nil {
+		return err
+	}
+
+	if req.Node == "" {
+		req.Node = cfg.DefaultNode
+	}
+	if req.Storage == "" {
+		req.Storage = cfg.DefaultStorage
+	}
+	if req.Bridge == "" {
+		req.Bridge = cfg.DefaultBridge
+	}
+	if req.TemplateVM == 0 {
+		req.TemplateVM = cfg.TemplateVMID
+	}
+
+	if req.IPAddress == "" {
+		ip, cidr, gw, dns, hostname, err := autoNetwork(ctx, db)
+		if err != nil {
+			return err
+		}
+		req.IPAddress = ip
+		req.CIDR = cidr
+		req.Gateway = gw
+		req.DNS = dns
+		if req.Hostname == "" {
+			req.Hostname = hostname
+		}
+	}
+
+	if req.Hytale.JVMHeap == "" {
+		heapMB := req.MemoryMB - 1024
+		if heapMB < 1024 {
+			heapMB = 1024
+		}
+		req.Hytale.JVMHeap = fmt.Sprintf("%dM", heapMB)
+	}
+
+	if req.DiskGB <= 0 {
+		req.DiskGB = 50
+	}
+
+	if req.Hytale.Port == 0 && j.DeploymentID != nil {
+		base := 5520
+		port := base + int(*j.DeploymentID)
+		if port > 65535 {
+			port = base + (int(*j.DeploymentID) % 1000)
+		}
+		req.Hytale.Port = port
+	}
+
+	if !req.Hytale.BackupEnabled {
+		req.Hytale.BackupEnabled = true
+		if req.Hytale.BackupFrequency == "" {
+			req.Hytale.BackupFrequency = "24h"
+		}
+		if req.Hytale.BackupRetention == 0 {
+			req.Hytale.BackupRetention = 2
+		}
+	}
+
+	if req.Hytale.AdminUser == "" {
+		req.Hytale.AdminUser = "hytaleadmin"
+	}
+	if req.Hytale.AdminPassword == "" {
+		req.Hytale.AdminPassword = generatePassword(20)
+	}
+
+	creds, err := config.LoadHytaleOAuth(ctx, db)
+	if err != nil || creds == nil || creds.RefreshToken == "" {
+		return fmt.Errorf("Hytale OAuth not configured: authenticate at /hytale/auth first")
+	}
+
+	tokens, err := hytale.RefreshAndCreateSession(ctx, creds.RefreshToken, creds.ProfileUUID)
+	if err != nil {
+		return fmt.Errorf("Hytale session tokens: %w", err)
+	}
+
+	c, err := proxmox.NewClient(cfg.APIURL, cfg.APITokenID, cfg.APITokenSecret)
+	if err != nil {
+		return err
+	}
+
+	deploymentID := j.DeploymentID
+	if deploymentID == nil {
+		return fmt.Errorf("job has no deployment_id")
+	}
+
+	appendLog(ctx, db, *deploymentID, "info", "Starting Hytale deployment pipeline")
+
+	var vmid int
+	ipCIDR := fmt.Sprintf("%s/%d", req.IPAddress, req.CIDR)
+	ip := req.IPAddress
+
+	if dryRun {
+		appendLog(ctx, db, *deploymentID, "info", "DRY_RUN is enabled, simulating steps")
+		time.Sleep(1 * time.Second)
+	} else {
+		appendLog(ctx, db, *deploymentID, "info", "Requesting next VMID from Proxmox")
+		vmid, err = c.NextID(ctx)
+		if err != nil {
+			appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Failed to get next VMID: %v", err))
+			return err
+		}
+
+		appendLog(ctx, db, *deploymentID, "info", fmt.Sprintf("Cloning VM from template %d to new VMID %d", req.TemplateVM, vmid))
+		upid, err := c.CloneVM(ctx, req.Node, req.TemplateVM, vmid, req.Name, req.Storage)
+		if err != nil {
+			appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Clone failed: %v", err))
+			return err
+		}
+		appendLog(ctx, db, *deploymentID, "info", fmt.Sprintf("Waiting for clone task %s", upid))
+		if err := c.WaitForTask(ctx, req.Node, upid, 30*time.Minute); err != nil {
+			appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Clone task failed: %v", err))
+			return err
+		}
+
+		updateDeploymentStatus(ctx, db, *deploymentID, StatusRunning, &vmid, &ip, nil, nil)
+
+		appendLog(ctx, db, *deploymentID, "info", "Configuring VM resources and cloud-init networking")
+		if err := c.ConfigureVM(ctx, req.Node, vmid, req.Cores, req.MemoryMB, req.DiskGB, req.Bridge, req.VLAN, ipCIDR, req.Gateway); err != nil {
+			appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Configure VM failed: %v", err))
+			return err
+		}
+
+		if req.DiskGB > 0 {
+			currentGB, errCur := c.GetScsi0SizeGB(ctx, req.Node, vmid)
+			if errCur != nil {
+				appendLog(ctx, db, *deploymentID, "info", fmt.Sprintf("Could not read current disk size: %v, skipping resize", errCur))
+			} else if req.DiskGB > currentGB {
+				appendLog(ctx, db, *deploymentID, "info", fmt.Sprintf("Resizing VM disk from %dG to %dG", currentGB, req.DiskGB))
+				if upid, err := c.ResizeDisk(ctx, req.Node, vmid, req.DiskGB); err != nil {
+					appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Resize disk failed: %v", err))
+					return err
+				} else if upid != "" {
+					if err := c.WaitForTask(ctx, req.Node, upid, 30*time.Minute); err != nil {
+						appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Resize disk task failed: %v", err))
+						return err
+					}
+				}
+			}
+		}
+
+		appendLog(ctx, db, *deploymentID, "info", "Starting VM")
+		upid, err = c.StartVM(ctx, req.Node, vmid)
+		if err != nil {
+			appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Start VM failed: %v", err))
+			return err
+		}
+		if err := c.WaitForTask(ctx, req.Node, upid, 10*time.Minute); err != nil {
+			appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Start task failed: %v", err))
+			return err
+		}
+
+		appendLog(ctx, db, *deploymentID, "info", "Waiting for SSH to become available on VM")
+		if err := c.WaitForSSH(ctx, ip, 22, 15*time.Minute); err != nil {
+			appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("SSH did not become available: %v", err))
+			return err
+		}
+	}
+
+	appendLog(ctx, db, *deploymentID, "info", "Running Ansible playbook to provision Hytale server")
+
+	if dryRun {
+		appendLog(ctx, db, *deploymentID, "info", "DRY_RUN enabled: skipping ansible-playbook")
+	} else {
+		if err := runAnsibleHytale(ctx, req, ip, cfg.SSHUser, tokens); err != nil {
+			appendLog(ctx, db, *deploymentID, "error", fmt.Sprintf("Ansible provisioning failed: %v", err))
+			return err
+		}
+	}
+
+	hytaleDir := "/opt/hytale"
+	hytaleUser := "hytale"
+	if u := req.Hytale.AdminUser; u != "" {
+		hytaleDir = "/home/" + u + "/hytale"
+		hytaleUser = u
+	}
+	result := map[string]any{
+		"vmid":          vmid,
+		"ip":            ip,
+		"job":           j.ID,
+		"run":           uuid.NewString(),
+		"hytale_dir":    hytaleDir,
+		"hytale_user":   hytaleUser,
+		"sftp_user":     req.Hytale.AdminUser,
+		"sftp_password": req.Hytale.AdminPassword,
+	}
+	rawResult, _ := json.Marshal(result)
+	resStr := string(rawResult)
+	updateDeploymentStatus(ctx, db, *deploymentID, StatusSuccess, &vmid, &ip, nil, &resStr)
+	appendLog(ctx, db, *deploymentID, "info", "Hytale deployment completed successfully")
+	return nil
+}
+
+// runAnsibleHytale spawns ansible-playbook for Hytale provisioning.
+func runAnsibleHytale(ctx context.Context, req HytaleDeploymentRequest, hostIP, sshUser string, tokens *hytale.SessionTokens) error {
+	playbook := "./ansible/provision_hytale.yml"
+	if v := os.Getenv("ANSIBLE_HYTALE_PLAYBOOK_PATH"); v != "" {
+		playbook = v
+	}
+
+	extraVars := req.Hytale.ToAnsibleVars()
+	extraVars["target_host"] = hostIP
+	extraVars["hytale_session_token"] = tokens.SessionToken
+	extraVars["hytale_identity_token"] = tokens.IdentityToken
+
+	extraJSON, err := json.Marshal(extraVars)
+	if err != nil {
+		return err
+	}
+
+	args := []string{
+		playbook,
+		"-i", fmt.Sprintf("%s,", hostIP),
+	}
+	if sshUser != "" {
+		args = append(args, "-u", sshUser)
+	}
+	args = append(args, "--extra-vars", string(extraJSON))
+
+	cmd := exec.CommandContext(ctx, "ansible-playbook", args...)
+	env := append(os.Environ(), "ANSIBLE_HOST_KEY_CHECKING=False")
+	keyPath := os.Getenv("APP_SSH_KEY_PATH")
+	if keyPath == "" {
+		keyPath = "./ssh/id_ed25519"
+	}
+	if keyPath != "" {
+		env = append(env, "ANSIBLE_PRIVATE_KEY_FILE="+keyPath)
+	}
+	cmd.Env = env
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		out := strings.TrimSpace(stdout.String() + "\n" + stderr.String())
+		if out != "" {
+			return fmt.Errorf("%w\n\nSortie Ansible:\n%s", err, out)
+		}
+		return err
+	}
 	return nil
 }
 

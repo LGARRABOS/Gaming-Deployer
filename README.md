@@ -104,6 +104,12 @@ pgdctl update --test   # pull feature/navbar-multi-jeux + build + restart (tests
 - `pgdctl update` : met à jour depuis `main`, rebuild et redémarre.
 - `pgdctl update --test` : met à jour depuis la branche de test `feature/navbar-multi-jeux` pour tester en conditions réelles avant merge.
 
+**Erreur « Permission denied »** : mettez à jour manuellement la copie du script puis réessayez :
+```bash
+sudo cp /opt/proxmox-game-deployer/scripts/pgdctl /usr/local/bin/pgdctl
+sudo pgdctl update
+```
+
 ---
 
 ## 📚 Detailed documentation

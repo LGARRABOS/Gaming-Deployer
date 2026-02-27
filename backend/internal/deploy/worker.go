@@ -111,8 +111,15 @@ func (w *Worker) processNextJob(ctx context.Context) error {
 		return err
 	}
 
-	// ProcessJob can be long running; we run it outside of the transaction.
-	err = ProcessJob(ctx, w.DB, &job, cfg)
+	// Route by job type.
+	var processErr error
+	switch job.Type {
+	case "deploy_hytale":
+		processErr = ProcessHytaleJob(ctx, w.DB, &job, cfg)
+	default:
+		processErr = ProcessJob(ctx, w.DB, &job, cfg)
+	}
+	err = processErr
 
 	finalStatus := JobDone
 	var lastError *string

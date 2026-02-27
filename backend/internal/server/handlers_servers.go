@@ -40,7 +40,8 @@ func (s *Server) logServerAction(ctx context.Context, deploymentID int64, action
 	`, deploymentID, db.Now().Format(time.RFC3339), action, details, successInt, message)
 }
 
-// handleListServers returns Minecraft deployments that completed successfully (server list).
+// handleListServers returns deployments that completed successfully (server list).
+// Query param ?game=minecraft|hytale filters by game (default: minecraft).
 // For role "user", only returns servers assigned to that user.
 func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 	u := s.mustUser(r)
@@ -48,6 +49,15 @@ func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+	game := r.URL.Query().Get("game")
+	if game == "" {
+		game = "minecraft"
+	}
+	if game != "minecraft" && game != "hytale" {
+		http.Error(w, "invalid game", http.StatusBadRequest)
+		return
+	}
+
 	var rows *sql.Rows
 	var err error
 	if u.Role == auth.RoleUser {
@@ -57,7 +67,7 @@ func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 			WHERE game = ? AND status = ? AND assigned_to_user_id = ?
 			ORDER BY created_at DESC
 			LIMIT 100
-		`, "minecraft", string(deploy.StatusSuccess), u.ID)
+		`, game, string(deploy.StatusSuccess), u.ID)
 	} else {
 		rows, err = s.DB.Sql().QueryContext(r.Context(), `
 			SELECT id, request_json, result_json, vmid, ip_address, assigned_to_user_id, created_at
@@ -65,7 +75,7 @@ func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 			WHERE game = ? AND status = ?
 			ORDER BY created_at DESC
 			LIMIT 100
-		`, "minecraft", string(deploy.StatusSuccess))
+		`, game, string(deploy.StatusSuccess))
 	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -107,15 +117,29 @@ func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 			v := assignedTo.Int64
 			item.AssignedToUserID = &v
 		}
-		var req deploy.MinecraftDeploymentRequest
-		if err := json.Unmarshal([]byte(reqJSON), &req); err == nil {
-			item.Name = req.Name
-			if item.Name == "" {
-				item.Name = "Minecraft #" + strconv.FormatInt(id, 10)
+		if game == "minecraft" {
+			var req deploy.MinecraftDeploymentRequest
+			if err := json.Unmarshal([]byte(reqJSON), &req); err == nil {
+				item.Name = req.Name
+				if item.Name == "" {
+					item.Name = "Minecraft #" + strconv.FormatInt(id, 10)
+				}
+				item.Port = req.Minecraft.Port
+				if item.Port == 0 {
+					item.Port = 25565
+				}
 			}
-			item.Port = req.Minecraft.Port
-			if item.Port == 0 {
-				item.Port = 25565
+		} else {
+			var req deploy.HytaleDeploymentRequest
+			if err := json.Unmarshal([]byte(reqJSON), &req); err == nil {
+				item.Name = req.Name
+				if item.Name == "" {
+					item.Name = "Hytale #" + strconv.FormatInt(id, 10)
+				}
+				item.Port = req.Hytale.Port
+				if item.Port == 0 {
+					item.Port = 5520
+				}
 			}
 		}
 		list = append(list, item)
@@ -138,17 +162,17 @@ func (s *Server) handleGetServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	row := s.DB.Sql().QueryRowContext(r.Context(), `
-		SELECT id, request_json, result_json, vmid, ip_address, status, assigned_to_user_id, created_at
+		SELECT id, game, request_json, result_json, vmid, ip_address, status, assigned_to_user_id, created_at
 		FROM deployments
-		WHERE id = ? AND game = ? AND status = ?
-	`, id, "minecraft", string(deploy.StatusSuccess))
-	var reqJSON, ip string
+		WHERE id = ? AND status = ?
+	`, id, string(deploy.StatusSuccess))
+	var reqJSON, ip, game string
 	var resultJSON sql.NullString
 	var vmid sql.NullInt64
 	var status string
 	var assignedTo sql.NullInt64
 	var createdAt time.Time
-	if err := row.Scan(&id, &reqJSON, &resultJSON, &vmid, &ip, &status, &assignedTo, &createdAt); err != nil {
+	if err := row.Scan(&id, &game, &reqJSON, &resultJSON, &vmid, &ip, &status, &assignedTo, &createdAt); err != nil {
 		if err == sql.ErrNoRows {
 			http.NotFound(w, r)
 			return
@@ -160,28 +184,47 @@ func (s *Server) handleGetServer(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	var req deploy.MinecraftDeploymentRequest
-	if err := json.Unmarshal([]byte(reqJSON), &req); err != nil {
-		http.Error(w, "invalid request_json", http.StatusInternalServerError)
-		return
-	}
-	name := req.Name
-	if name == "" {
-		name = "Minecraft #" + strconv.FormatInt(id, 10)
-	}
-	port := req.Minecraft.Port
-	if port == 0 {
-		port = 25565
+	var name string
+	var port int
+	if game == "hytale" {
+		var req deploy.HytaleDeploymentRequest
+		if err := json.Unmarshal([]byte(reqJSON), &req); err != nil {
+			http.Error(w, "invalid request_json", http.StatusInternalServerError)
+			return
+		}
+		name = req.Name
+		if name == "" {
+			name = "Hytale #" + strconv.FormatInt(id, 10)
+		}
+		port = req.Hytale.Port
+		if port == 0 {
+			port = 5520
+		}
+	} else {
+		var req deploy.MinecraftDeploymentRequest
+		if err := json.Unmarshal([]byte(reqJSON), &req); err != nil {
+			http.Error(w, "invalid request_json", http.StatusInternalServerError)
+			return
+		}
+		name = req.Name
+		if name == "" {
+			name = "Minecraft #" + strconv.FormatInt(id, 10)
+		}
+		port = req.Minecraft.Port
+		if port == 0 {
+			port = 25565
+		}
 	}
 	out := map[string]any{
-		"id":          id,
-		"name":        name,
-		"ip":          ip,
-		"port":        port,
-		"status":      status,
-		"created_at":  createdAt.Format(time.RFC3339),
-		"vmid":        nil,
-		"sftp_user":   nil,
+		"id":            id,
+		"name":          name,
+		"ip":            ip,
+		"port":          port,
+		"game":          game,
+		"status":        status,
+		"created_at":    createdAt.Format(time.RFC3339),
+		"vmid":          nil,
+		"sftp_user":     nil,
 		"sftp_password": nil,
 	}
 	if vmid.Valid {
@@ -225,13 +268,22 @@ func (s *Server) handleServerAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	game, err := s.getServerGame(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	serviceName := "minecraft"
+	if game == "hytale" {
+		serviceName = "hytale"
+	}
 	ip, sshUser, err := s.getServerSSHTarget(ctx, deploymentID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 	keyPath := sshexec.KeyPath()
-	command := "sudo systemctl " + action + " minecraft"
+	command := "sudo systemctl " + action + " " + serviceName
 	stdout, stderr, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, command)
 	if err != nil {
 		s.logServerAction(ctx, deploymentID, "service_"+action, action, false, err.Error())
@@ -292,7 +344,7 @@ func (s *Server) handleServerConsoleCommand(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "response": resp})
 }
 
-// handleServerConsole streams the Minecraft service logs (journalctl -u minecraft -f) as SSE.
+// handleServerConsole streams the service logs (journalctl -u minecraft|hytale -f) as SSE.
 func (s *Server) handleServerConsole(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
@@ -301,13 +353,22 @@ func (s *Server) handleServerConsole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	game, err := s.getServerGame(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	serviceName := "minecraft"
+	if game == "hytale" {
+		serviceName = "hytale"
+	}
 	ip, sshUser, err := s.getServerSSHTarget(ctx, deploymentID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 	keyPath := sshexec.KeyPath()
-	command := "sudo journalctl -u minecraft -f -n 300 --no-pager -o cat"
+	command := "sudo journalctl -u " + serviceName + " -f -n 300 --no-pager -o cat"
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -356,7 +417,7 @@ func (s *Server) handleServerConsole(w http.ResponseWriter, r *http.Request) {
 	_ = sshexec.StreamCommand(ctx, ip, sshUser, keyPath, command, onLine)
 }
 
-// handleServerStatus returns the systemd status of the minecraft service (active/inactive/failed).
+// handleServerStatus returns the systemd status of the service (active/inactive/failed).
 func (s *Server) handleServerStatus(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
@@ -365,13 +426,22 @@ func (s *Server) handleServerStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	game, err := s.getServerGame(ctx, deploymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	serviceName := "minecraft"
+	if game == "hytale" {
+		serviceName = "hytale"
+	}
 	ip, sshUser, err := s.getServerSSHTarget(ctx, deploymentID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 	keyPath := sshexec.KeyPath()
-	stdout, _, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, "systemctl is-active minecraft")
+	stdout, _, err := sshexec.RunCommand(ctx, ip, sshUser, keyPath, "systemctl is-active "+serviceName)
 	status := "unknown"
 	if err == nil {
 		status = strings.TrimSpace(stdout)
@@ -636,12 +706,27 @@ func (s *Server) handleUpdateServerConfig(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-// getServerSSHTarget returns ip and ssh_user for a successful Minecraft deployment.
+// getServerGame returns the game type (minecraft, hytale) for a successful deployment.
+func (s *Server) getServerGame(ctx context.Context, deploymentID int64) (game string, err error) {
+	row := s.DB.Sql().QueryRowContext(ctx, `
+		SELECT game FROM deployments
+		WHERE id = ? AND status = ?
+	`, deploymentID, string(deploy.StatusSuccess))
+	if err := row.Scan(&game); err != nil {
+		return "", err
+	}
+	if game == "" {
+		game = "minecraft"
+	}
+	return game, nil
+}
+
+// getServerSSHTarget returns ip and ssh_user for a successful deployment (Minecraft or Hytale).
 func (s *Server) getServerSSHTarget(ctx context.Context, deploymentID int64) (ip, sshUser string, err error) {
 	row := s.DB.Sql().QueryRowContext(ctx, `
 		SELECT ip_address FROM deployments
-		WHERE id = ? AND game = ? AND status = ?
-	`, deploymentID, "minecraft", string(deploy.StatusSuccess))
+		WHERE id = ? AND status = ?
+	`, deploymentID, string(deploy.StatusSuccess))
 	var ipAddr sql.NullString
 	if err := row.Scan(&ipAddr); err != nil {
 		return "", "", err
@@ -660,38 +745,59 @@ func (s *Server) getServerSSHTarget(ctx context.Context, deploymentID int64) (ip
 	return ipAddr.String, user, nil
 }
 
-// getServerMinecraftPath returns mc_dir and mc_user from deployment result_json (for server.properties path and ownership).
-func (s *Server) getServerMinecraftPath(ctx context.Context, deploymentID int64) (mcDir, mcUser string, err error) {
+// getServerGamePath returns the server directory and user from deployment result_json.
+// Works for both Minecraft (mc_dir, mc_user) and Hytale (hytale_dir, hytale_user).
+func (s *Server) getServerGamePath(ctx context.Context, deploymentID int64) (serverDir, serverUser string, err error) {
 	row := s.DB.Sql().QueryRowContext(ctx, `
-		SELECT result_json FROM deployments
-		WHERE id = ? AND game = ? AND status = ?
-	`, deploymentID, "minecraft", string(deploy.StatusSuccess))
+		SELECT game, result_json FROM deployments
+		WHERE id = ? AND status = ?
+	`, deploymentID, string(deploy.StatusSuccess))
+	var game string
 	var resultJSON sql.NullString
-	if err := row.Scan(&resultJSON); err != nil {
+	if err := row.Scan(&game, &resultJSON); err != nil {
 		return "", "", err
 	}
-	mcDir = "/opt/minecraft"
-	mcUser = "minecraft"
+	if game == "hytale" {
+		serverDir = "/opt/hytale"
+		serverUser = "hytale"
+	} else {
+		serverDir = "/opt/minecraft"
+		serverUser = "minecraft"
+	}
 	if resultJSON.Valid && resultJSON.String != "" {
 		var res map[string]any
 		if json.Unmarshal([]byte(resultJSON.String), &res) == nil {
-			if d, ok := res["mc_dir"].(string); ok && d != "" {
-				mcDir = d
-			}
-			if u, ok := res["mc_user"].(string); ok && u != "" {
-				mcUser = u
+			if game == "hytale" {
+				if d, ok := res["hytale_dir"].(string); ok && d != "" {
+					serverDir = d
+				}
+				if u, ok := res["hytale_user"].(string); ok && u != "" {
+					serverUser = u
+				}
+			} else {
+				if d, ok := res["mc_dir"].(string); ok && d != "" {
+					serverDir = d
+				}
+				if u, ok := res["mc_user"].(string); ok && u != "" {
+					serverUser = u
+				}
 			}
 		}
 	}
-	return mcDir, mcUser, nil
+	return serverDir, serverUser, nil
 }
 
-// getServerRCONConfig extracts RCON port and password from deployment result_json.
+// getServerMinecraftPath returns mc_dir and mc_user from deployment result_json (Minecraft only).
+func (s *Server) getServerMinecraftPath(ctx context.Context, deploymentID int64) (mcDir, mcUser string, err error) {
+	return s.getServerGamePath(ctx, deploymentID)
+}
+
+// getServerRCONConfig extracts RCON port and password from deployment result_json (Minecraft only).
 func (s *Server) getServerRCONConfig(ctx context.Context, deploymentID int64) (port int, password string, err error) {
 	row := s.DB.Sql().QueryRowContext(ctx, `
 		SELECT result_json FROM deployments
-		WHERE id = ? AND game = ? AND status = ?
-	`, deploymentID, "minecraft", string(deploy.StatusSuccess))
+		WHERE id = ? AND status = ?
+	`, deploymentID, string(deploy.StatusSuccess))
 	var resultJSON sql.NullString
 	if err := row.Scan(&resultJSON); err != nil {
 		return 0, "", err

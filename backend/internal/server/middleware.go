@@ -105,8 +105,8 @@ func (s *Server) serverAccessMiddleware(next http.Handler) http.Handler {
 		}
 		var assignedTo sql.NullInt64
 		err = s.DB.QueryRowContext(r.Context(), `
-			SELECT assigned_to_user_id FROM deployments WHERE id = ? AND game = ?
-		`, id, "minecraft").Scan(&assignedTo)
+			SELECT assigned_to_user_id FROM deployments WHERE id = ?
+		`, id).Scan(&assignedTo)
 		if err != nil || !assignedTo.Valid || assignedTo.Int64 != u.ID {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return

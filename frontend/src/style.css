@@ -712,6 +712,27 @@ input[type="checkbox"] {
   border-color: rgba(224, 125, 125, 0.2);
 }
 
+.hytale-auth-box {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+}
+.hytale-auth-link {
+  display: block;
+  word-break: break-all;
+  color: var(--accent);
+  margin-bottom: var(--space-2);
+}
+.hytale-auth-code {
+  font-size: 1.1rem;
+  margin: var(--space-2) 0;
+}
+.hytale-auth-wait {
+  color: var(--text-muted);
+  margin: 0;
+}
+
 .link-cta {
   color: var(--accent);
   font-weight: 500;
