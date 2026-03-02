@@ -22,10 +22,24 @@ import (
 const (
 	downloaderClientID   = "hytale-downloader"
 	downloaderScope      = "openid offline auth:downloader"
-	downloaderBaseURL    = "https://downloader.hytale.com"
-	accountDataBaseURL   = "https://account-data.hytale.com"
+	defaultDownloaderURL = "https://downloader.hytale.com"
+	defaultAccountDataBaseURL = "https://account-data.hytale.com"
 	defaultDownloaderDir = "/opt/proxmox-game-deployer/hytale-server-files"
 )
+
+func getDownloaderBaseURL() string {
+	if u := os.Getenv("HYTALE_DOWNLOADER_URL"); u != "" {
+		return u
+	}
+	return defaultDownloaderURL
+}
+
+func getAccountDataBaseURL() string {
+	if u := os.Getenv("HYTALE_ACCOUNT_DATA_URL"); u != "" {
+		return u
+	}
+	return defaultAccountDataBaseURL
+}
 
 // DefaultHytaleServerFilesDir returns the default cache directory for Hytale server files.
 func DefaultHytaleServerFilesDir() string {
@@ -79,7 +93,7 @@ func EnsureServerFiles(ctx context.Context, db config.Store, cacheDir string) er
 		patchline = "release"
 	}
 
-	manifest, err := fetchDownloaderManifest(ctx, patchline)
+	manifest, err := fetchDownloaderManifest(ctx, accessToken, patchline)
 	if err != nil {
 		return fmt.Errorf("hytale downloader manifest: %w", err)
 	}
@@ -300,11 +314,14 @@ func refreshDownloaderAccessToken(ctx context.Context, refreshToken string) (acc
 	return tok.AccessToken, newRefresh, nil
 }
 
-func fetchDownloaderManifest(ctx context.Context, patchline string) (*downloaderManifest, error) {
-	url := fmt.Sprintf("%s/version/%s.json", downloaderBaseURL, patchline)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func fetchDownloaderManifest(ctx context.Context, accessToken, patchline string) (*downloaderManifest, error) {
+	manifestURL := fmt.Sprintf("%s/version/%s.json", getDownloaderBaseURL(), patchline)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, manifestURL, nil)
 	if err != nil {
 		return nil, err
+	}
+	if accessToken != "" {
+		req.Header.Set("Authorization", "Bearer "+accessToken)
 	}
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -314,7 +331,13 @@ func fetchDownloaderManifest(ctx context.Context, patchline string) (*downloader
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("manifest request failed: %s: %s", resp.Status, string(body))
+		errMsg := fmt.Sprintf("manifest request failed: %s", resp.Status)
+		if resp.StatusCode == http.StatusNotFound {
+			errMsg += " — l'API Hytale a peut-être changé. Vérifiez que l'authentification downloader est valide (Paramètres Hytale) et que HYTALE_PATCHLINE est correct (release ou pre-release)."
+		} else if len(body) > 0 && len(body) < 500 {
+			errMsg += ": " + string(body)
+		}
+		return nil, fmt.Errorf("%s", errMsg)
 	}
 	var m downloaderManifest
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
@@ -324,7 +347,7 @@ func fetchDownloaderManifest(ctx context.Context, patchline string) (*downloader
 }
 
 func fetchSignedGameAssetsURL(ctx context.Context, accessToken, patchline string) (string, error) {
-	url := fmt.Sprintf("%s/game-assets/%s", accountDataBaseURL, patchline)
+	url := fmt.Sprintf("%s/game-assets/%s", getAccountDataBaseURL(), patchline)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
